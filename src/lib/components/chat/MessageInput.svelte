@@ -28,7 +28,7 @@
 		extractCurlyBraceWords
 	} from '$lib/utils';
 	import { uploadFile } from '$lib/apis/files';
-	import { generateAutoCompletion } from '$lib/apis';
+	import { generateAutoCompletion, augmentQuestion } from '$lib/apis';
 	import { deleteFileById } from '$lib/apis/files';
 
 	import { WEBUI_BASE_URL, WEBUI_API_BASE_URL, PASTED_TEXT_CHARACTER_LIMIT } from '$lib/constants';
@@ -51,6 +51,7 @@
 	import Wrench from '../icons/Wrench.svelte';
 	import CommandLine from '../icons/CommandLine.svelte';
 	import Sparkles from '../icons/Sparkles.svelte';
+	import LightBulb from '../icons/LightBulb.svelte';
 
 	import { KokoroWorker } from '$lib/workers/KokoroWorker';
 
@@ -446,6 +447,41 @@
 			dropzoneElement?.removeEventListener('dragleave', onDragLeave);
 		}
 	});
+
+    // 질문 증강 버튼 동작
+    async function handleQuestionAugmentation() {
+        if (!prompt) {
+            toast.error($i18n.t('Please enter a question first'));
+            return;
+        }
+
+        try {
+            // 현재 선택된 모델 ID 확인
+            const modelId = atSelectedModel?.id || selectedModels[0];
+            if (!modelId) {
+                toast.error($i18n.t('Please select a model first'));
+                return;
+            }
+
+            // API 호출
+            const result = await augmentQuestion(
+                localStorage.token,
+                modelId,
+                prompt,
+                history?.currentId
+            );
+
+            // ✅ 결과 적용: 한 문장 질문만 입력창에 반영
+            prompt = result.augmented_question;
+
+            // 입력창 포커스
+            const chatInput = document.getElementById('chat-input');
+            chatInput?.focus();
+        } catch (error) {
+            console.error('Error augmenting question:', error);
+            toast.error($i18n.t('Failed to augment question'));
+        }
+    }
 </script>
 
 <FilesOverlay show={dragged} />
@@ -1221,6 +1257,20 @@
 												</svg>
 											</button>
 										</InputMenu>
+
+										<!-- 질문 증강 버튼 추가 -->
+										<Tooltip content={$i18n.t('Augment Question')} placement="top">
+											<button
+												on:click|preventDefault={handleQuestionAugmentation}
+												type="button"
+												class="px-2 @xl:px-2.5 py-2 flex gap-1.5 items-center text-sm rounded-full transition-colors duration-300 focus:outline-hidden max-w-full overflow-hidden hover:bg-gray-50 dark:hover:bg-gray-800 bg-transparent text-gray-600 dark:text-gray-300"
+											>
+												<LightBulb className="size-4" strokeWidth="1.75" />
+												<span class="hidden @xl:block whitespace-nowrap overflow-hidden text-ellipsis leading-none pr-0.5">
+													{$i18n.t('질문 증강')}
+												</span>
+											</button>
+										</Tooltip>
 
 										{#if $_user && (showToolsButton || (toggleFilters && toggleFilters.length > 0) || showWebSearchButton || showImageGenerationButton || showCodeInterpreterButton)}
 											<div

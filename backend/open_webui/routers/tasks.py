@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from typing import Optional
 import logging
 import re
+import json
 
 from open_webui.utils.chat import generate_chat_completion
 from open_webui.utils.task import (
@@ -671,6 +672,84 @@ async def generate_moa_response(
 
     try:
         return await generate_chat_completion(request, form_data=payload, user=user)
+    except Exception as e:
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={"detail": str(e)},
+        )
+
+
+
+from fastapi import APIRouter, Request, Depends, HTTPException, status
+from fastapi.responses import JSONResponse
+import json
+
+router = APIRouter()
+
+@router.post("/augment-question")
+async def augment_question(
+    request: Request, form_data: dict, user=Depends(get_verified_user)
+):
+    """
+    질문을 증강하는 API 엔드포인트
+    """
+    # 모델 가져오기
+    if getattr(request.state, "direct", False) and hasattr(request.state, "model"):
+        models = {
+            request.state.model["id"]: request.state.model,
+        }
+    else:
+        models = request.app.state.MODELS
+
+    model_id = form_data.get("model")
+    if not model_id or model_id not in models:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Model not found",
+        )
+
+    # ✅ JSON 출력 요구 제거된 간결한 프롬프트
+    template = """
+다음 질문을 더 명확하고 구체적인 한 문장으로 바꿔주세요.
+질문 의도를 유지하되, 주제를 명확히 하고 맥락을 추가하세요.
+
+원래 질문: {question}
+
+결과:
+    """
+    content = template.format(question=form_data["question"])
+
+    payload = {
+        "model": model_id,
+        "messages": [{"role": "user", "content": content}],
+        "stream": False,
+        "metadata": {
+            **(request.state.metadata if hasattr(request.state, "metadata") else {}),
+            "chat_id": form_data.get("chat_id", None),
+            "task": "question_augmentation",
+            "task_body": form_data,
+        },
+    }
+
+    try:
+        payload = await process_pipeline_inlet_filter(request, payload, user, models)
+    except Exception as e:
+        raise e
+
+    try:
+        response = await generate_chat_completion(request, form_data=payload, user=user)
+
+        # ✅ 단순 텍스트 응답 처리 (JSON 아님)
+        if isinstance(response, dict) and "choices" in response:
+            content = response["choices"][0]["message"]["content"].strip()
+            return {
+                "augmented_question": content
+            }
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to generate augmented question"
+            )
     except Exception as e:
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,

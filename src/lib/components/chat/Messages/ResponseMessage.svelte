@@ -592,42 +592,18 @@
 	}}
 />
 
+
 {#key message.id}
 	<div
-		class=" flex w-full message-{message.id}"
+		class="flex w-full message-{message.id}"
 		id="message-{message.id}"
 		dir={$settings.chatDirection}
 	>
-		<div class={`shrink-0 ltr:mr-3 rtl:ml-3`}>
-			<ProfileImage
-				src={model?.info?.meta?.profile_image_url ??
-					($i18n.language === 'dg-DG' ? `/doge.png` : `${WEBUI_BASE_URL}/static/favicon.png`)}
-				className={'size-8'}
-			/>
-		</div>
-
-		<div class="flex-auto w-0 pl-1 relative">
-			<Name>
-				<Tooltip content={model?.name ?? message.model} placement="top-start">
-					<span class="line-clamp-1 text-black dark:text-white">
-						{model?.name ?? message.model}
-					</span>
-				</Tooltip>
-
-				{#if message.timestamp}
-					<div
-						class=" self-center text-xs invisible group-hover:visible text-gray-400 font-medium first-letter:capitalize ml-0.5 translate-y-[1px]"
-					>
-						<Tooltip content={dayjs(message.timestamp * 1000).format('LLLL')}>
-							<span class="line-clamp-1">{formatDate(message.timestamp * 1000)}</span>
-						</Tooltip>
-					</div>
-				{/if}
-			</Name>
-
+		<div class="flex-auto w-0 relative">
 			<div>
 				<div class="chat-{message.role} w-full min-w-full markdown-prose">
 					<div>
+
 						{#if (message?.statusHistory ?? [...(message?.status ? [message?.status] : [])]).length > 0}
 							{@const status = (
 								message?.statusHistory ?? [...(message?.status ? [message?.status] : [])]

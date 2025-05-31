@@ -1526,3 +1526,25 @@ export const updateModelConfig = async (token: string, config: GlobalModelConfig
 
 	return res;
 };
+
+export async function augmentQuestion(token: string, modelId: string, question: string, chatId?: string) {
+	const response = await fetch(`${WEBUI_API_BASE_URL}/tasks/augment-question`, {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json',
+			Authorization: `Bearer ${token}`
+		},
+		body: JSON.stringify({
+			model: modelId,
+			question: question,
+			chat_id: chatId
+		})
+	});
+
+	if (!response.ok) {
+		const error = await response.json();
+		throw new Error(error.detail || 'Failed to augment question');
+	}
+
+	return await response.json(); // { augmented_question: "..." }
+}

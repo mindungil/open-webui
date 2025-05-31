@@ -7,7 +7,22 @@ export default {
 	content: ['./src/**/*.{html,js,svelte,ts}'],
 	theme: {
 		extend: {
-			colors: {
+			fontSize: {
+				'xs': ['0.875rem', { lineHeight: '1.25rem' }],     // 14px
+				'sm': ['1rem', { lineHeight: '1.5rem' }],          // 16px
+				'base': ['1.2rem', { lineHeight: '1.75rem' }],     // 19.2px
+				'lg': ['1.25rem', { lineHeight: '1.75rem' }],      // 20px
+				'xl': ['1.5rem', { lineHeight: '2rem' }],          // 24px
+				'2xl': ['1.875rem', { lineHeight: '2.25rem' }],    // 30px
+				'3xl': ['2.25rem', { lineHeight: '2.5rem' }],      // 36px
+				'4xl': ['3rem', { lineHeight: '1' }],              // 48px
+				'5xl': ['3.75rem', { lineHeight: '1' }],           // 60px
+				'6xl': ['4.5rem', { lineHeight: '1' }],            // 72px
+				'7xl': ['6rem', { lineHeight: '1' }],              // 96px
+				'8xl': ['8rem', { lineHeight: '1' }],              // 128px
+				'9xl': ['9rem', { lineHeight: '1' }],              // 144px
+			},
+                        colors: {
 				gray: {
 					50: 'var(--color-gray-50, #f9f9f9)',
 					100: 'var(--color-gray-100, #ececec)',
@@ -26,6 +41,7 @@ export default {
 			typography: {
 				DEFAULT: {
 					css: {
+						fontSize: '1.2rem',
 						pre: false,
 						code: false,
 						'pre code': false,

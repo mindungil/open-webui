@@ -2152,7 +2152,7 @@
 								'controls',
 								'controlslist',
 								'coords',
-								'crossorigin',
+								'crossOrigin',
 								'datetime',
 								'decoding',
 								'default',

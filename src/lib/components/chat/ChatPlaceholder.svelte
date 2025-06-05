@@ -51,7 +51,7 @@
 							placement="right"
 						>
 							<img
-								crossorigin="anonymous"
+								crossOrigin="anonymous"
 								src={model?.info?.meta?.profile_image_url ??
 									($i18n.language === 'dg-DG'
 										? `/doge.png`

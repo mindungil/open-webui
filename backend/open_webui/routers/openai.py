@@ -44,6 +44,8 @@ from open_webui.utils.misc import (
 from open_webui.utils.auth import get_admin_user, get_verified_user
 from open_webui.utils.access_control import has_access
 
+from open_webui.utils.usage_tracker import APIUsageTracker
+
 
 log = logging.getLogger(__name__)
 log.setLevel(SRC_LOG_LEVELS["OPENAI"])
@@ -93,6 +95,28 @@ async def cleanup_response(
     if session:
         await session.close()
 
+def estimate_tokens_from_messages(messages: list) -> int:
+    """메시지에서 대략적인 토큰 수 추정"""
+    if not messages:
+        return 0
+    
+    total_chars = 0
+    for msg in messages:
+        content = msg.get("content", "")
+        if isinstance(content, str):
+            total_chars += len(content)
+        elif isinstance(content, list):
+            # 멀티모달 메시지 처리
+            for item in content:
+                if isinstance(item, dict) and item.get("type") == "text":
+                    total_chars += len(item.get("text", ""))
+    
+    # 대략 4글자 = 1토큰으로 추정 (GPT 기준)
+    # 한국어는 약간 더 많이 소모되므로 3.5로 계산
+    estimated_tokens = int(total_chars / 3.5)
+    
+    # 최소 토큰 수 보장 (시스템 메시지 등 고려)
+    return max(estimated_tokens, 10)
 
 def openai_o_series_handler(payload):
     """
@@ -746,6 +770,39 @@ async def generate_chat_completion(
             status_code=404,
             detail="Model not found",
         )
+        
+    # 사용량 제한 체크 추가 (기존 코드 아래)
+    # ========================================
+    # API 사용량 제한 확인
+    # ========================================
+    try:
+        estimated_tokens = estimate_tokens_from_messages(payload.get("messages", []))
+        usage_check = await APIUsageTracker.check_user_limits(user, idx, estimated_tokens)
+        
+        if not usage_check["allowed"]:
+            error_details = {
+                "error": "API usage limit exceeded",
+                "type": usage_check["reason"],
+                "message": f"You have exceeded your {usage_check['reason'].replace('_', ' ')} limit."
+            }
+            
+            if "limit" in usage_check:
+                error_details.update({
+                    "limit": usage_check["limit"],
+                    "current_usage": usage_check["current"],
+                    "remaining": usage_check["remaining"]
+                })
+            
+            raise HTTPException(
+                status_code=429,  # Too Many Requests
+                detail=error_details
+            )
+    except HTTPException:
+        # HTTP 예외 (429 제한 에러)는 그대로 전달
+        raise
+    except Exception as e:
+        # 다른 예외만 로그하고 계속 진행
+        log.warning(f"Usage limit check failed for user {user.id}: {e}")
 
     # Get the API config for the model
     api_config = request.app.state.config.OPENAI_API_CONFIGS.get(
@@ -845,6 +902,16 @@ async def generate_chat_completion(
         # Check if response is SSE
         if "text/event-stream" in r.headers.get("Content-Type", ""):
             streaming = True
+            # 스트리밍 응답에 대한 사용량 기록 (추정값 사용)
+            try:
+                asyncio.create_task(
+                    APIUsageTracker.record_usage(
+                        user.id, idx, estimated_tokens, estimated_tokens // 2
+                    )
+                )
+            except Exception as e:
+                log.warning(f"Failed to record streaming usage for user {user.id}: {e}")
+            
             return StreamingResponse(
                 r.content,
                 status_code=r.status,
@@ -861,6 +928,24 @@ async def generate_chat_completion(
                 response = await r.text()
 
             r.raise_for_status()
+            
+            # 일반 응답에 대한 사용량 기록 (실제 토큰 수 사용)
+            try:
+                if isinstance(response, dict) and "usage" in response:
+                    input_tokens = response["usage"].get("prompt_tokens", estimated_tokens)
+                    output_tokens = response["usage"].get("completion_tokens", 0)
+                else:
+                    # 토큰 정보가 없는 경우 추정값 사용
+                    input_tokens = estimated_tokens
+                    output_tokens = estimated_tokens // 3
+                
+                # 비동기로 사용량 기록 (응답 속도에 영향 주지 않도록)
+                asyncio.create_task(
+                    APIUsageTracker.record_usage(user.id, idx, input_tokens, output_tokens)
+                )
+            except Exception as e:
+                log.warning(f"Failed to record usage for user {user.id}: {e}")
+            
             return response
     except Exception as e:
         log.exception(e)
@@ -981,3 +1066,258 @@ async def proxy(path: str, request: Request, user=Depends(get_verified_user)):
             if r:
                 r.close()
             await session.close()
+
+
+# ========================================
+# 사용량 관리 API (관리자 전용)
+# ========================================
+
+@router.get("/usage/stats")
+async def get_usage_stats(user=Depends(get_admin_user)):
+    """전체 API 사용량 통계 조회 (관리자 전용)"""
+    try:
+        stats = await APIUsageTracker.get_all_usage_stats()
+        return {
+            "success": True,
+            "data": stats
+        }
+    except Exception as e:
+        log.error(f"Failed to get usage stats: {e}")
+        raise HTTPException(
+            status_code=500, 
+            detail="Failed to retrieve usage statistics"
+        )
+
+@router.get("/usage/user/{user_id}")
+async def get_user_usage_details(user_id: str, admin_user=Depends(get_admin_user)):
+    """특정 사용자의 API 사용량 상세 조회 (관리자 전용)"""
+    try:
+        usage_details = await APIUsageTracker.get_user_usage_details(user_id)
+        return {
+            "success": True,
+            "data": usage_details
+        }
+    except Exception as e:
+        log.error(f"Failed to get user usage for {user_id}: {e}")
+        raise HTTPException(
+            status_code=500, 
+            detail="Failed to retrieve user usage"
+        )
+
+@router.post("/usage/limits/{user_id}")
+async def update_user_limits(
+    user_id: str, 
+    limits: dict, 
+    admin_user=Depends(get_admin_user)
+):
+    """사용자별 API 사용 제한 설정 (관리자 전용)"""
+    try:
+        # 입력값 검증
+        valid_fields = {
+            'daily_token_limit', 'monthly_token_limit',
+            'daily_request_limit', 'monthly_request_limit', 
+            'daily_cost_limit', 'monthly_cost_limit', 'enabled'
+        }
+        
+        # 유효하지 않은 필드 제거
+        filtered_limits = {k: v for k, v in limits.items() if k in valid_fields}
+        
+        if not filtered_limits:
+            raise HTTPException(
+                status_code=400, 
+                detail="No valid limit fields provided"
+            )
+        
+        # 값 범위 검증
+        for key, value in filtered_limits.items():
+            if 'limit' in key and isinstance(value, (int, float)) and value < 0:
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"{key} cannot be negative"
+                )
+        
+        result = await APIUsageTracker.set_user_limits(user_id, filtered_limits)
+        
+        if result.get("success"):
+            return {
+                "success": True,
+                "message": "User limits updated successfully",
+                "data": result
+            }
+        else:
+            raise HTTPException(
+                status_code=500, 
+                detail=result.get("error", "Failed to update limits")
+            )
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"Failed to update limits for {user_id}: {e}")
+        raise HTTPException(
+            status_code=500, 
+            detail="Failed to update user limits"
+        )
+
+@router.get("/usage/limits/{user_id}")
+async def get_user_limits(user_id: str, admin_user=Depends(get_admin_user)):
+    """사용자의 현재 제한 설정 조회 (관리자 전용)"""
+    try:
+        from open_webui.models.usage import UserAPILimitTable
+        
+        limits = UserAPILimitTable.get_user_limits(user_id)
+        
+        if limits:
+            return {
+                "success": True,
+                "data": {
+                    "user_id": user_id,
+                    "daily_token_limit": limits.daily_token_limit,
+                    "monthly_token_limit": limits.monthly_token_limit,
+                    "daily_request_limit": limits.daily_request_limit,
+                    "monthly_request_limit": limits.monthly_request_limit,
+                    "daily_cost_limit": limits.daily_cost_limit,
+                    "monthly_cost_limit": limits.monthly_cost_limit,
+                    "enabled": limits.enabled,
+                    "created_at": limits.created_at.isoformat(),
+                    "updated_at": limits.updated_at.isoformat()
+                }
+            }
+        else:
+            return {
+                "success": True,
+                "data": {
+                    "user_id": user_id,
+                    "message": "No limits set for this user",
+                    "default_limits": {
+                        "daily_token_limit": 50000,
+                        "monthly_token_limit": 500000,
+                        "daily_request_limit": 200,
+                        "monthly_request_limit": 2000,
+                        "daily_cost_limit": 10.0,
+                        "monthly_cost_limit": 100.0,
+                        "enabled": False
+                    }
+                }
+            }
+            
+    except Exception as e:
+        log.error(f"Failed to get limits for {user_id}: {e}")
+        raise HTTPException(
+            status_code=500, 
+            detail="Failed to retrieve user limits"
+        )
+
+@router.post("/usage/reset/{user_id}")
+async def reset_user_usage(
+    user_id: str, 
+    reset_data: dict,
+    admin_user=Depends(get_admin_user)
+):
+    """사용자 사용량 리셋 (관리자 전용)"""
+    try:
+        reset_type = reset_data.get("reset_type", "daily")
+        
+        if reset_type not in ["daily", "monthly", "all"]:
+            raise HTTPException(
+                status_code=400, 
+                detail="reset_type must be one of: daily, monthly, all"
+            )
+        
+        result = await APIUsageTracker.reset_user_usage(user_id, reset_type)
+        
+        if result.get("success"):
+            return {
+                "success": True,
+                "message": f"User {reset_type} usage reset successfully",
+                "data": result
+            }
+        else:
+            raise HTTPException(
+                status_code=500, 
+                detail=result.get("error", "Failed to reset usage")
+            )
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"Failed to reset usage for {user_id}: {e}")
+        raise HTTPException(
+            status_code=500, 
+            detail="Failed to reset user usage"
+        )
+
+@router.get("/usage/users")
+async def list_users_with_usage(admin_user=Depends(get_admin_user)):
+    """사용량이 있는 모든 사용자 목록 (관리자 전용)"""
+    try:
+        from open_webui.internal.db import get_db
+        from open_webui.models.usage import UserAPIUsage
+        from sqlalchemy import func, distinct
+        
+        with get_db() as db:
+            # 사용량이 있는 사용자들과 기본 통계
+            users_with_usage = db.query(
+                UserAPIUsage.user_id,
+                func.sum(UserAPIUsage.monthly_tokens).label('total_monthly_tokens'),
+                func.sum(UserAPIUsage.monthly_requests).label('total_monthly_requests'),
+                func.sum(UserAPIUsage.monthly_cost).label('total_monthly_cost'),
+                func.max(UserAPIUsage.updated_at).label('last_activity')
+            ).group_by(UserAPIUsage.user_id).order_by(
+                func.sum(UserAPIUsage.monthly_tokens).desc()
+            ).all()
+            
+            return {
+                "success": True,
+                "data": {
+                    "total_users": len(users_with_usage),
+                    "users": [
+                        {
+                            "user_id": user.user_id,
+                            "monthly_tokens": user.total_monthly_tokens or 0,
+                            "monthly_requests": user.total_monthly_requests or 0,
+                            "monthly_cost": float(user.total_monthly_cost or 0),
+                            "last_activity": user.last_activity.isoformat() if user.last_activity else None
+                        }
+                        for user in users_with_usage
+                    ]
+                }
+            }
+            
+    except Exception as e:
+        log.error(f"Failed to get users with usage: {e}")
+        raise HTTPException(
+            status_code=500, 
+            detail="Failed to retrieve users with usage"
+        )
+
+# ========================================
+# 사용자용 사용량 조회 API (본인 정보만)
+# ========================================
+
+@router.get("/usage/my")
+async def get_my_usage(user=Depends(get_verified_user)):
+    """현재 사용자의 API 사용량 조회"""
+    try:
+        usage_details = await APIUsageTracker.get_user_usage_details(user.id)
+        
+        # 민감한 정보 제거 (사용자에게는 자신의 정보만)
+        safe_data = {
+            "user_id": usage_details["user_id"],
+            "limits": usage_details["limits"],
+            "current_usage": usage_details["current_usage"],
+            "total_apis": usage_details["total_apis"]
+        }
+        
+        return {
+            "success": True,
+            "data": safe_data
+        }
+        
+    except Exception as e:
+        log.error(f"Failed to get usage for user {user.id}: {e}")
+        raise HTTPException(
+            status_code=500, 
+            detail="Failed to retrieve your usage information"
+        )
+

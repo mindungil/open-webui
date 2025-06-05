@@ -175,20 +175,6 @@
 	<div class="w-full absolute top-0 left-0 right-0 h-8 drag-region" />
 
 	{#if loaded}
-		<div class="fixed m-10 z-50">
-			<div class="flex space-x-2">
-				<div class=" self-center">
-					<img
-						id="logo"
-						crossorigin="anonymous"
-						src="{WEBUI_BASE_URL}/static/splash.png"
-						class=" w-6 rounded-full"
-						alt=""
-					/>
-				</div>
-			</div>
-		</div>
-
 		<div
 			class="fixed bg-transparent min-h-screen w-full flex justify-center font-primary z-50 text-black dark:text-white"
 		>
@@ -199,7 +185,7 @@
 							class="flex items-center justify-center gap-3 text-xl sm:text-2xl text-center font-semibold dark:text-gray-200"
 						>
 							<div>
-								{$i18n.t('Signing in to {{WEBUI_NAME}}', { WEBUI_NAME: $WEBUI_NAME })}
+								{$i18n.t('로그인중...')}
 							</div>
 
 							<div>
@@ -216,21 +202,23 @@
 								submitHandler();
 							}}
 						>
-							<div class="mb-1">
-								<div class=" text-2xl font-medium">
+							<div class="mb-1 flex flex-col items-center">
+								<img src="{WEBUI_BASE_URL}/static/jblogo.png" alt="전북특별자치도 로고" class="mx-auto mb-6 w-128 h-32 object-contain" />
+								<div class="text-2xl font-medium text-center leading-snug">
 									{#if $config?.onboarding ?? false}
 										{$i18n.t(`Get started with {{WEBUI_NAME}}`, { WEBUI_NAME: $WEBUI_NAME })}
 									{:else if mode === 'ldap'}
 										{$i18n.t(`Sign in to {{WEBUI_NAME}} with LDAP`, { WEBUI_NAME: $WEBUI_NAME })}
 									{:else if mode === 'signin'}
-										{$i18n.t(`Sign in to {{WEBUI_NAME}}`, { WEBUI_NAME: $WEBUI_NAME })}
+										<!-- 한 줄씩 출력 -->
+										<!--<span>{$WEBUI_NAME}</span>-->
 									{:else}
-										{$i18n.t(`Sign up to {{WEBUI_NAME}}`, { WEBUI_NAME: $WEBUI_NAME })}
+										{$i18n.t(`회원가입`)}
 									{/if}
 								</div>
-
+							
 								{#if $config?.onboarding ?? false}
-									<div class="mt-1 text-xs font-medium text-gray-600 dark:text-gray-500">
+									<div class="mt-1 text-xs font-medium text-gray-600 dark:text-gray-500 text-center">
 										ⓘ {$WEBUI_NAME}
 										{$i18n.t(
 											'does not make any external connections, and your data stays securely on your locally hosted server.'

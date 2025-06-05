@@ -6,7 +6,7 @@
 </script>
 
 <img
-	crossorigin="anonymous"
+	crossOrigin="anonymous"
 	src={src === ''
 		? `${WEBUI_BASE_URL}/static/favicon.png`
 		: src.startsWith(WEBUI_BASE_URL) ||

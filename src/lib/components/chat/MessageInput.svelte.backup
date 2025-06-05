@@ -33,7 +33,6 @@
 
 	import { WEBUI_BASE_URL, WEBUI_API_BASE_URL, PASTED_TEXT_CHARACTER_LIMIT } from '$lib/constants';
 
-	import UsageIndicator from '$lib/components/common/UsageIndicator.svelte';
 	import InputMenu from './MessageInput/InputMenu.svelte';
 	import VoiceRecording from './MessageInput/VoiceRecording.svelte';
 	import FilesOverlay from './MessageInput/FilesOverlay.svelte';
@@ -55,7 +54,6 @@
 	import LightBulb from '../icons/LightBulb.svelte';
 
 	import { KokoroWorker } from '$lib/workers/KokoroWorker';
-	import { getUsageSummary } from '$lib/apis/usage';
 
 	const i18n = getContext('i18n');
 
@@ -178,20 +176,6 @@
 			codeInterpreterCapableModels.length &&
 		$config?.features?.enable_code_interpreter &&
 		($_user.role === 'admin' || $_user?.permissions?.features?.code_interpreter);
-
-	let usageData = null;
-	let usageInterval;
-
-	async function fetchUsageData() {
-		try {
-			const response = await getUsageSummary(localStorage.token);
-			if (response.success) {
-				usageData = response.data;
-			}
-		} catch (error) {
-			console.error('Failed to fetch usage data:', error);
-		}
-	}
 
 	const scrollToBottom = () => {
 		const element = document.getElementById('messages-container');
@@ -445,10 +429,6 @@
 		dropzoneElement?.addEventListener('dragover', onDragOver);
 		dropzoneElement?.addEventListener('drop', onDrop);
 		dropzoneElement?.addEventListener('dragleave', onDragLeave);
-
-		await fetchUsageData();
-		// Update usage data every minute
-		usageInterval = setInterval(fetchUsageData, 60000);
 	});
 
 	onDestroy(() => {
@@ -465,10 +445,6 @@
 			dropzoneElement?.removeEventListener('dragover', onDragOver);
 			dropzoneElement?.removeEventListener('drop', onDrop);
 			dropzoneElement?.removeEventListener('dragleave', onDragLeave);
-		}
-
-		if (usageInterval) {
-			clearInterval(usageInterval);
 		}
 	});
 
@@ -611,7 +587,7 @@
 					? 'max-w-full'
 					: 'max-w-6xl'} px-2.5 mx-auto inset-x-0"
 			>
-				<div class="relative">
+				<div class="">
 					<input
 						bind:this={filesInputElement}
 						bind:files={inputFiles}
@@ -1426,14 +1402,13 @@
 										{/if}
 									</div>
 
-									<div class="self-end flex space-x-1 mr-1 shrink-0 overflow-x-auto scrollbar-none flex-nowrap">
-										<UsageIndicator className="shrink-0 min-w-0 max-w-[120px] truncate" />
+									<div class="self-end flex space-x-1 mr-1 shrink-0">
 										{#if (!history?.currentId || history.messages[history.currentId]?.done == true) && ($_user?.role === 'admin' || ($_user?.permissions?.chat?.stt ?? true))}
 											<!-- {$i18n.t('Record voice')} -->
 											<Tooltip content={$i18n.t('Dictate')}>
 												<button
 													id="voice-input-button"
-													class=" text-gray-600 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-200 transition rounded-full p-1.5 mr-0.5 self-center shrink-0"
+													class=" text-gray-600 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-200 transition rounded-full p-1.5 mr-0.5 self-center"
 													type="button"
 													on:click={async () => {
 														try {

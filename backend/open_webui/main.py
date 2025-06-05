@@ -82,6 +82,7 @@ from open_webui.routers import (
     utils,
 )
 
+from open_webui.routers import usage
 from open_webui.routers.retrieval import (
     get_embedding_function,
     get_ef,
@@ -1045,6 +1046,8 @@ app.add_middleware(
 
 app.mount("/ws", socket_app)
 
+
+app.include_router(usage.router, prefix="/api/v1/usage", tags=["usage"])
 
 app.include_router(ollama.router, prefix="/ollama", tags=["ollama"])
 app.include_router(openai.router, prefix="/openai", tags=["openai"])

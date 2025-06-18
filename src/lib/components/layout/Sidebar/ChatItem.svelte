@@ -375,7 +375,7 @@
 			draggable="false"
 		>
 			<div class=" flex self-center flex-1 w-full">
-				<div dir="auto" class="text-left self-center overflow-hidden w-full h-[20px]">
+				<div dir="auto" class="text-left self-center overflow-hidden w-full min-h-[20px] leading-normal break-all whitespace-normal">
 					{title}
 				</div>
 			</div>

@@ -1999,7 +1999,7 @@ RAG_ALLOWED_FILE_EXTENSIONS = PersistentConfig(
     "rag.file.allowed_extensions",
     [
         ext.strip()
-        for ext in os.environ.get("RAG_ALLOWED_FILE_EXTENSIONS", "").split(",")
+        for ext in os.environ.get("RAG_ALLOWED_FILE_EXTENSIONS", "pdf,docx,hwp,hwpx").split(",")
         if ext.strip()
     ],
 )
@@ -2938,4 +2938,17 @@ LDAP_VALIDATE_CERT = PersistentConfig(
 
 LDAP_CIPHERS = PersistentConfig(
     "LDAP_CIPHERS", "ldap.server.ciphers", os.environ.get("LDAP_CIPHERS", "ALL")
+)
+
+# HWP/HWPX 처리 관련 설정
+HWP_JAR_PATH = PersistentConfig(
+    "HWP_JAR_PATH",
+    "rag.hwp.jar_path",
+    os.environ.get("HWP_JAR_PATH", "/workspace/open-webui/backend/python-hwplib/hwplib-1.1.8.jar"),
+)
+
+HWPX_JAR_PATH = PersistentConfig(
+    "HWPX_JAR_PATH",
+    "rag.hwpx.jar_path",
+    os.environ.get("HWPX_JAR_PATH", "/workspace/open-webui/backend/python-hwpxlib/hwpxlib-1.0.5.jar"),
 )

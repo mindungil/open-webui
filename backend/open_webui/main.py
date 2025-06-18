@@ -369,6 +369,8 @@ from open_webui.config import (
     AUTOCOMPLETE_GENERATION_INPUT_MAX_LENGTH,
     AppConfig,
     reset_config,
+    HWP_JAR_PATH,
+    HWPX_JAR_PATH,
 )
 from open_webui.env import (
     AUDIT_EXCLUDED_PATHS,
@@ -1046,7 +1048,6 @@ app.add_middleware(
 
 app.mount("/ws", socket_app)
 
-
 app.include_router(usage.router, prefix="/api/v1/usage", tags=["usage"])
 
 app.include_router(ollama.router, prefix="/ollama", tags=["ollama"])
@@ -1637,3 +1638,7 @@ else:
     log.warning(
         f"Frontend build directory not found at '{FRONTEND_BUILD_DIR}'. Serving API only."
     )
+
+# HWP/HWPX 처리 설정
+app.state.config.HWP_JAR_PATH = HWP_JAR_PATH
+app.state.config.HWPX_JAR_PATH = HWPX_JAR_PATH

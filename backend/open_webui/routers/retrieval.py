@@ -530,6 +530,10 @@ class ConfigForm(BaseModel):
     DOCUMENT_INTELLIGENCE_KEY: Optional[str] = None
     MISTRAL_OCR_API_KEY: Optional[str] = None
 
+    # HWP/HWPX 처리 설정
+    HWP_JAR_PATH: Optional[str] = None
+    HWPX_JAR_PATH: Optional[str] = None
+
     # Reranking settings
     RAG_RERANKING_MODEL: Optional[str] = None
     RAG_RERANKING_ENGINE: Optional[str] = None
@@ -714,6 +718,10 @@ async def update_rag_config(
         if form_data.MISTRAL_OCR_API_KEY is not None
         else request.app.state.config.MISTRAL_OCR_API_KEY
     )
+
+    # HWP/HWPX 처리 설정
+    request.app.state.config.HWP_JAR_PATH = form_data.HWP_JAR_PATH
+    request.app.state.config.HWPX_JAR_PATH = form_data.HWPX_JAR_PATH
 
     # Reranking settings
     request.app.state.config.RAG_RERANKING_ENGINE = (
@@ -935,6 +943,9 @@ async def update_rag_config(
         "DOCUMENT_INTELLIGENCE_ENDPOINT": request.app.state.config.DOCUMENT_INTELLIGENCE_ENDPOINT,
         "DOCUMENT_INTELLIGENCE_KEY": request.app.state.config.DOCUMENT_INTELLIGENCE_KEY,
         "MISTRAL_OCR_API_KEY": request.app.state.config.MISTRAL_OCR_API_KEY,
+        # HWP/HWPX 처리 설정
+        "HWP_JAR_PATH": request.app.state.config.HWP_JAR_PATH,
+        "HWPX_JAR_PATH": request.app.state.config.HWPX_JAR_PATH,
         # Reranking settings
         "RAG_RERANKING_MODEL": request.app.state.config.RAG_RERANKING_MODEL,
         "RAG_RERANKING_ENGINE": request.app.state.config.RAG_RERANKING_ENGINE,
@@ -1270,6 +1281,8 @@ def process_file(
                     DOCUMENT_INTELLIGENCE_ENDPOINT=request.app.state.config.DOCUMENT_INTELLIGENCE_ENDPOINT,
                     DOCUMENT_INTELLIGENCE_KEY=request.app.state.config.DOCUMENT_INTELLIGENCE_KEY,
                     MISTRAL_OCR_API_KEY=request.app.state.config.MISTRAL_OCR_API_KEY,
+                    HWP_JAR_PATH=getattr(request.app.state.config, 'HWP_JAR_PATH', '/workspace/open-webui/backend/python-hwplib/hwplib-1.1.8.jar'),
+                    HWPX_JAR_PATH=getattr(request.app.state.config, 'HWPX_JAR_PATH', '/workspace/open-webui/backend/python-hwpxlib/hwpxlib-1.0.5.jar'),
                 )
                 docs = loader.load(
                     file.filename, file.meta.get("content_type"), file_path

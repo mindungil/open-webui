@@ -134,6 +134,9 @@ def upload_file(
             "OpenWebUI-User-Name": user.name,
             "OpenWebUI-File-Id": id,
         }
+
+        filedata = [id, name, filename, tags]
+
         contents, file_path = Storage.upload_file(file.file, filename, tags)
 
         file_item = Files.insert_new_file(
@@ -159,7 +162,7 @@ def upload_file(
                         "video/webm"
                     }:
                         file_path = Storage.get_file(file_path)
-                        result = transcribe(request, file_path, file_metadata)
+                        result = transcribe(request, file_path, file_metadata, filedata)
 
                         process_file(
                             request,
@@ -429,7 +432,14 @@ async def get_file_content_by_id(
                 encoded_filename = quote(filename)
                 headers = {}
 
+                # txt처럼 끝나지만 .txt 확장자가 없는 경우 강제로 확장자 붙이기
+                if filename.lower().endswith("txt") and not filename.lower().endswith(".txt"):
+                    filename += ".txt"
+                encoded_filename = quote(filename)
+
+
                 if attachment:
+                    
                     headers["Content-Disposition"] = (
                         f"attachment; filename*=UTF-8''{encoded_filename}"
                     )

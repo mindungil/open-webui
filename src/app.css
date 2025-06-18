@@ -1,5 +1,9 @@
 @reference "./tailwind.css";
 
+:root {
+	--font-size-base: 1rem; /* 기본 폰트 크기 */
+}
+
 @font-face {
 	font-family: 'Inter';
 	src: url('/assets/fonts/Inter-Variable.ttf');
@@ -32,6 +36,7 @@
 
 html {
 	word-break: break-word;
+	font-size: var(--font-size-base);
 }
 
 code {

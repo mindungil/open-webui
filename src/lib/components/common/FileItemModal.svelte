@@ -146,6 +146,7 @@
 				<div class="max-h-96 overflow-scroll scrollbar-hidden text-xs whitespace-pre-wrap">
 					{item?.file?.data?.content ?? 'No content'}
 				</div>
+
 			{/if}
 		</div>
 	</div>

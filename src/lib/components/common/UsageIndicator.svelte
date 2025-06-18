@@ -54,7 +54,7 @@
 
 	onMount(() => {
 		loadUsage();
-		interval = setInterval(loadUsage, 5000); // 30초마다 업데이트
+		interval = setInterval(loadUsage, 10000); // 5초마다 업데이트
 	});
 
 	onDestroy(() => {

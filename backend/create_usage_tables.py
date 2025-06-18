@@ -61,14 +61,14 @@ def create_usage_tables():
         # 테이블 생성 실행
         with engine.connect() as conn:
             conn.execute(text(create_usage_table))
-            print("✅ user_api_usage table created")
+            print("***user_api_usage 테이블이 생성되었습니다.")
             
             conn.execute(text(create_limit_table))
-            print("✅ user_api_limits table created")
+            print("***user_api_limits 테이블이 생성되었습니다.")
             
             for idx_sql in create_indexes:
                 conn.execute(text(idx_sql))
-            print("✅ Indexes created")
+            print("***인덱스가 생성되었습니다.")
             
             conn.commit()
         
@@ -76,12 +76,12 @@ def create_usage_tables():
         with engine.connect() as conn:
             result = conn.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE '%usage%'"))
             tables = result.fetchall()
-            print(f"📋 Created tables: {[table[0] for table in tables]}")
+            print(f"***생성된 테이블: {[table[0] for table in tables]}")
         
-        print("🎉 Usage tables created successfully!")
+        print("**사용량 테이블이 생성되었습니다.")
         
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"**에러: {e}")
         import traceback
         traceback.print_exc()
 

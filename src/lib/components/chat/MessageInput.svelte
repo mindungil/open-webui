@@ -1283,7 +1283,7 @@
 										</InputMenu>
 
 										<!-- 질문 증강 버튼 추가 -->
-										<Tooltip content={$i18n.t('Augment Question')} placement="top">
+										<Tooltip content={$i18n.t('AI를 통한 질문 구체화')} placement="top">
 											<button
 												on:click|preventDefault={handleQuestionAugmentation}
 												type="button"

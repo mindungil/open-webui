@@ -56,6 +56,8 @@ class DatalabMarkerLoader:
             "webp": "image/webp",
             "gif": "image/gif",
             "tiff": "image/tiff",
+            "hwp": "application/x-hwp",
+            "hwpx": "application/x-hwpx",
         }
         return mime_map.get(ext, "application/octet-stream")
 

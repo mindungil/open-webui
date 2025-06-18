@@ -135,8 +135,6 @@ async def get_users_with_usage(user=Depends(get_current_user)):
         user_list = Users.get_users()
         result = []
         for u in user_list["users"]:
-            if u.role == "admin":
-                continue  # 관리자 계정은 제외
             usage_details = await APIUsageTracker.get_user_usage_details(u.id)
             monthly_tokens = 0
             monthly_requests = 0

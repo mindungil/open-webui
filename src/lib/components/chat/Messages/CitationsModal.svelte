@@ -3,15 +3,17 @@
 	import Modal from '$lib/components/common/Modal.svelte';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 	import { WEBUI_API_BASE_URL } from '$lib/constants';
+	import type { Writable } from 'svelte/store';
+	import type { i18n as i18nType } from 'i18next';
 
-	const i18n = getContext('i18n');
+	const i18n = getContext<Writable<i18nType>>('i18n');
 
 	export let show = false;
 	export let citation;
 	export let showPercentage = false;
 	export let showRelevance = true;
 
-	let mergedDocuments = [];
+	let mergedDocuments: any[] = [];
 
 	function calculatePercentage(distance: number) {
 		if (typeof distance !== 'number') return null;
@@ -30,8 +32,14 @@
 		return 'bg-red-200 dark:bg-red-800 text-red-800 dark:text-red-200';
 	}
 
+	// STT 결과인지 판단하는 함수
+	function isSTTResult(document: any): boolean {
+		const fileName = document?.metadata?.name ?? document.source?.name ?? '';
+		return /\.(mp3|m4a|wav|flac|webm|aac)$/i.test(fileName);
+	}
+
 	$: if (citation) {
-		mergedDocuments = citation.document?.map((c, i) => {
+		mergedDocuments = citation.document?.map((c: any, i: number) => {
 			return {
 				source: citation.source,
 				document: c,
@@ -39,9 +47,9 @@
 				distance: citation.distances?.[i]
 			};
 		});
-		if (mergedDocuments.every((doc) => doc.distance !== undefined)) {
+		if (mergedDocuments.every((doc: any) => doc.distance !== undefined)) {
 			mergedDocuments = mergedDocuments.sort(
-				(a, b) => (b.distance ?? Infinity) - (a.distance ?? Infinity)
+				(a: any, b: any) => (b.distance ?? Infinity) - (a.distance ?? Infinity)
 			);
 		}
 	}
@@ -117,6 +125,53 @@
 									{/if}
 								</div>
 							</Tooltip>
+							
+							{#if isSTTResult(document)}
+								<Tooltip
+									className="w-fit"
+									content={$i18n.t('Open file')}
+									placement="top-start"
+									tippyOptions={{ duration: [500, 0] }}
+								>
+									<div class="text-sm dark:text-gray-400 flex items-center gap-2 w-fit">
+										<a
+										class="hover:text-gray-500 dark:hover:text-gray-100 underline grow"
+										href={
+											document?.metadata?.file_id
+											? `${WEBUI_API_BASE_URL}/files/${document.metadata.file_id + 'txt'}/content?attachment=true`
+											: '#'
+										}
+										target="_blank"
+										>
+										{decodeString(
+											(document?.metadata?.name ?? document.source.name).replace(/\.(mp3|m4a|wav|flac|webm|aac)$/i, '.txt')
+										)}
+										</a>
+									</div>
+								</Tooltip>
+								<Tooltip
+									className="w-fit"
+									content={$i18n.t('Download detailed transcript')}
+									placement="top-start"
+									tippyOptions={{ duration: [500, 0] }}
+								>
+									<div class="text-sm dark:text-gray-400 flex items-center gap-2 w-fit">
+										<a
+										class="hover:text-gray-500 dark:hover:text-gray-100 underline grow"
+										href={
+											document?.metadata?.file_id
+											? `${WEBUI_API_BASE_URL}/files/${document.metadata.file_id + 'docx'}/content?attachment=true`
+											: '#'
+										}
+										target="_blank"
+										>
+										{decodeString(
+											(document?.metadata?.name ?? document.source.name).replace(/\.(mp3|m4a|wav|flac|webm|aac)$/i, '.docx')
+										)}
+										</a>
+									</div>
+								</Tooltip>
+							{/if}
 							{#if document.metadata?.parameters}
 								<div class="text-sm font-medium dark:text-gray-300 mt-2">
 									{$i18n.t('Parameters')}

@@ -25,6 +25,7 @@ from open_webui.retrieval.loaders.external_document import ExternalDocumentLoade
 
 from open_webui.retrieval.loaders.mistral import MistralLoader
 from open_webui.retrieval.loaders.datalab_marker import DatalabMarkerLoader
+from open_webui.retrieval.loaders.hwp_loader import HWPLoader
 
 
 from open_webui.env import SRC_LOG_LEVELS, GLOBAL_LOG_LEVEL
@@ -261,6 +262,8 @@ class Loader:
                 "webp",
                 "gif",
                 "tiff",
+                "hwp",
+                "hwpx",
             ]
         ):
             loader = DatalabMarkerLoader(
@@ -371,6 +374,13 @@ class Loader:
                 loader = UnstructuredPowerPointLoader(file_path)
             elif file_ext == "msg":
                 loader = OutlookMessageLoader(file_path)
+            elif file_ext in ["hwp", "hwpx"]:
+                # HWP/HWPX 파일 처리
+                loader = HWPLoader(
+                    file_path=file_path,
+                    hwp_jar_path=self.kwargs.get("HWP_JAR_PATH", "/workspace/open-webui/backend/python-hwplib/hwplib-1.1.8.jar"),
+                    hwpx_jar_path=self.kwargs.get("HWPX_JAR_PATH", "/workspace/open-webui/backend/python-hwpxlib/hwpxlib-1.0.5.jar")
+                )
             elif self._is_text_file(file_ext, file_content_type):
                 loader = TextLoader(file_path, autodetect_encoding=True)
             else:

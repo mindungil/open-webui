@@ -1,5 +1,6 @@
 import { WEBUI_API_BASE_URL } from '$lib/constants';
 
+// 사용량 요약 정보 가져오기
 export async function getUsageSummary(token: string) {
     const response = await fetch(`${WEBUI_API_BASE_URL}/usage/summary`, {
         headers: {
@@ -15,7 +16,7 @@ export async function getUsageSummary(token: string) {
     return response.json();
 } 
 
-// 기존 getUsageSummary 함수 아래에 추가
+// 사용자 목록과 사용량 가져오기
 export async function getUsersWithUsage(token: string) {
     const response = await fetch(`${WEBUI_API_BASE_URL}/usage/users`, {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -24,6 +25,7 @@ export async function getUsersWithUsage(token: string) {
     return response.json();
 }
 
+// 특정 사용자의 사용량 가져오기
 export async function getUserUsage(token: string, userId: string) {
     const response = await fetch(`${WEBUI_API_BASE_URL}/usage/user/${userId}`, {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -32,14 +34,29 @@ export async function getUserUsage(token: string, userId: string) {
     return response.json();
 }
 
+// 특정 사용자의 한도 가져오기
 export async function getUserLimits(token: string, userId: string) {
     const response = await fetch(`${WEBUI_API_BASE_URL}/usage/limits/${userId}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        }
     });
-    if (!response.ok) throw new Error('Failed to fetch user limits');
-    return response.json();
+    
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Failed to fetch user limits');
+    }
+    
+    const data = await response.json();
+    if (!data.success) {
+        throw new Error(data.detail || 'Failed to fetch user limits');
+    }
+    
+    return data;
 }
 
+// 특정 사용자의 한도 수정하기
 export async function updateUserLimits(token: string, userId: string, limits: any) {
     const response = await fetch(`${WEBUI_API_BASE_URL}/usage/limits/${userId}`, {
         method: 'POST',
@@ -53,6 +70,7 @@ export async function updateUserLimits(token: string, userId: string, limits: an
     return response.json();
 }
 
+// 사용자 사용량 초기화하기
 export async function resetUserUsage(userId: string, resetType: string = 'all') {
     const token = localStorage.getItem('token');
     const response = await fetch(`${WEBUI_API_BASE_URL}/usage/reset/${userId}`, {

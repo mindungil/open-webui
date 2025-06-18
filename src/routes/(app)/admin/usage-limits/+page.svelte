@@ -10,6 +10,9 @@
     let userLimits = null;
     let loading = false;
     let editing = false;
+    let showModal = false;
+    let modalPosition = { x: 0, y: 0 };
+    let editButtonRef: HTMLElement;
 
     async function loadUsers() {
         loading = true;
@@ -22,15 +25,37 @@
         loading = false;
     }
 
-    async function selectUser(user) {
+    async function selectUser(user, event: MouseEvent) {
         selectedUser = user;
         editing = false;
         try {
             const res = await getUserLimits(localStorage.token, user.user_id);
+            if (!res.success) {
+                throw new Error(res.detail || 'Failed to load user limits');
+            }
             userLimits = res.data;
+            
+            // Position modal to the left of the button
+            const button = event.target as HTMLElement;
+            const rect = button.getBoundingClientRect();
+            modalPosition = {
+                x: rect.left - 330, // Modal width (320px) + 10px gap
+                y: rect.top
+            };
+            showModal = true;
         } catch (e) {
-            toast.error($i18n.t('Failed to load user limits'));
+            console.error('Error loading user limits:', e);
+            toast.error(e instanceof Error ? e.message : $i18n.t('Failed to load user limits'));
+            showModal = false;
+            selectedUser = null;
+            userLimits = null;
         }
+    }
+
+    function closeModal() {
+        showModal = false;
+        selectedUser = null;
+        userLimits = null;
     }
 
     async function saveLimits() {
@@ -62,7 +87,7 @@
 
 <div class="container mx-auto p-4">
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-        <h2 class="text-2xl font-bold mb-6 dark:text-white">{$i18n.t('전체 사용자 토큰 관리')}</h2>
+        <h2 class="text-2xl font-bold mb-6 dark:text-white">{$i18n.t('')}</h2>
         
         {#if loading}
             <div class="flex justify-center items-center h-32">
@@ -86,7 +111,7 @@
                                 {$i18n.t('마지막 활동')}
                             </th>
                             <th class="px-6 py-3 text-left text-xs font-large text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                                {$i18n.t('비고')}
+                                {$i18n.t('사용량 수정')}
                             </th>
                         </tr>
                     </thead>
@@ -107,8 +132,8 @@
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm">
                                     <button 
-                                        class="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300"
-                                        on:click={() => selectUser(user)}
+                                        class="inline-flex items-center px-3 py-1.5 text-sm font-medium text-indigo-600 bg-indigo-50 rounded-md hover:bg-indigo-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-200 dark:bg-indigo-900/30 dark:text-indigo-400 dark:hover:bg-indigo-900/50"
+                                        on:click={(e) => selectUser(user, e)}
                                     >
                                         {$i18n.t('수정')}
                                     </button>
@@ -119,91 +144,94 @@
                 </table>
             </div>
         {/if}
+    </div>
+</div>
 
-        {#if selectedUser && userLimits}
-            <div class="mt-8 p-6 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                <h3 class="text-lg font-semibold mb-4 dark:text-white">
+{#if showModal && selectedUser && userLimits}
+    <div 
+        class="fixed z-50"
+        style="left: {modalPosition.x}px; top: {modalPosition.y}px;"
+    >
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-4 w-80 transform transition-all border border-gray-200 dark:border-gray-700">
+            <div class="flex justify-between items-center mb-3">
+                <h3 class="text-sm font-semibold dark:text-white">
                     {selectedUser.user_name} {$i18n.t('님 토큰 수정')}
                 </h3>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div class="space-y-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                                {$i18n.t('일별 토큰 제한')}
-                            </label>
-                            <input 
-                                type="number" 
-                                bind:value={userLimits.daily_token_limit}
-                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-600 dark:border-gray-500 dark:text-white"
-                            />
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                                {$i18n.t('월별 토큰 제한')}
-                            </label>
-                            <input 
-                                type="number" 
-                                bind:value={userLimits.monthly_token_limit}
-                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-600 dark:border-gray-500 dark:text-white"
-                            />
-                        </div>
-                    </div>
-                    <div class="space-y-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                                {$i18n.t('일별 요청 횟수 제한')}
-                            </label>
-                            <input 
-                                type="number" 
-                                bind:value={userLimits.daily_request_limit}
-                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-600 dark:border-gray-500 dark:text-white"
-                            />
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                                {$i18n.t('월별 요청 횟수 제한')}
-                            </label>
-                            <input 
-                                type="number" 
-                                bind:value={userLimits.monthly_request_limit}
-                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-600 dark:border-gray-500 dark:text-white"
-                            />
-                        </div>
-                    </div>
+                <button 
+                    class="inline-flex items-center px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors duration-200 dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-600"
+                    on:click={closeModal}
+                >
+                    {$i18n.t('취소')}
+                </button>
+            </div>
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-medium text-gray-700 dark:text-gray-300">
+                        {$i18n.t('일별 토큰 제한')}
+                    </label>
+                    <input 
+                        type="number" 
+                        bind:value={userLimits.daily_token_limit}
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-600 dark:border-gray-500 dark:text-white text-sm"
+                    />
                 </div>
-                <div class="mt-4">
+                <div>
+                    <label class="block text-xs font-medium text-gray-700 dark:text-gray-300">
+                        {$i18n.t('월별 토큰 제한')}
+                    </label>
+                    <input 
+                        type="number" 
+                        bind:value={userLimits.monthly_token_limit}
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-600 dark:border-gray-500 dark:text-white text-sm"
+                    />
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-700 dark:text-gray-300">
+                        {$i18n.t('일별 요청 횟수 제한')}
+                    </label>
+                    <input 
+                        type="number" 
+                        bind:value={userLimits.daily_request_limit}
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-600 dark:border-gray-500 dark:text-white text-sm"
+                    />
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-700 dark:text-gray-300">
+                        {$i18n.t('월별 요청 횟수 제한')}
+                    </label>
+                    <input 
+                        type="number" 
+                        bind:value={userLimits.monthly_request_limit}
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-600 dark:border-gray-500 dark:text-white text-sm"
+                    />
+                </div>
+                <div>
                     <label class="inline-flex items-center">
                         <input 
                             type="checkbox" 
                             bind:checked={userLimits.enabled}
                             class="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-500"
                         />
-                        <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">
+                        <span class="ml-2 text-xs text-gray-700 dark:text-gray-300">
                             {$i18n.t('제한 활성화')}
                         </span>
                     </label>
                 </div>
-                <div class="mt-6 flex justify-end space-x-3">
-                    <button 
-                        class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 dark:bg-gray-600 dark:text-gray-300 dark:border-gray-500 dark:hover:bg-gray-500"
-                        on:click={() => { selectedUser = null; userLimits = null; }}
-                    >
-                        {$i18n.t('취소')}
-                    </button>
-                    <button 
-                        class="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-                        on:click={handleResetUsage}
-                    >
-                        {$i18n.t('사용량 리셋')}
-                    </button>
-                    <button 
-                        class="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                        on:click={saveLimits}
-                    >
-                        {$i18n.t('저장')}
-                    </button>
-                </div>
             </div>
-        {/if}
+            <div class="mt-4 flex justify-end space-x-2">
+                <button 
+                    class="inline-flex items-center px-3 py-1.5 text-sm font-medium text-rose-600 bg-rose-50 rounded-lg hover:bg-rose-100 focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:ring-offset-1 transition-all duration-200 dark:bg-rose-900/20 dark:text-rose-400 dark:hover:bg-rose-900/30 shadow-sm"
+                    on:click={handleResetUsage}
+                >
+                    {$i18n.t('사용량 리셋')}
+                </button>
+                <button 
+                    class="inline-flex items-center px-3 py-1.5 text-sm font-medium text-indigo-600 bg-indigo-50 rounded-md hover:bg-indigo-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-200 dark:bg-indigo-900/30 dark:text-indigo-400 dark:hover:bg-indigo-900/50"
+                    on:click={saveLimits}
+                >
+                    {$i18n.t('저장')}
+                </button>
+            </div>
+        </div>
     </div>
-</div>
+{/if}

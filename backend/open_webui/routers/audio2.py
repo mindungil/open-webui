@@ -15,8 +15,7 @@ import torch
 from tqdm import tqdm
 import concurrent.futures
 import gc
-from nsnet2_denoiser import NSnet2Enhancer as  NSNet2Denoiser
-import soundfile as sf
+
 
 import aiohttp
 import aiofiles
@@ -592,7 +591,7 @@ def convert_to_wav(input_path):
         audio = AudioSegment.from_file(input_path)
         # 노이즈 제거 및 오디오 품질 개선
         audio = effects.normalize(audio)
-        ## 볼륨 부스트 (약한 소리도 잘 인식하도록)
+        # 볼륨 부스트 (약한 소리도 잘 인식하도록)
         audio = audio + 6  # dB 부스트
         # 샘플레이트 조정 (16kHz가 Whisper에 최적)
         audio = audio.set_frame_rate(16000)
@@ -691,11 +690,6 @@ def process_chunk(chunk_path, pipe):
             torch.cuda.empty_cache()
             gc.collect()
         
-        #model = NSNet2Denoiser()
-        #noisy, sr = sf.read(chunk_path)
-        #clean = model(noisy, sr)
-        #sf.write(chunk_path, clean, sr)
-
         # Whisper 파라미터 최적화 (최소 필수 파라미터만 사용)
         result = pipe(
             chunk_path,

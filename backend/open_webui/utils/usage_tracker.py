@@ -105,9 +105,13 @@ class APIUsageTracker:
             return {"allowed": True, "reason": "check_failed"}
     
     @staticmethod
-    async def record_usage(user_id: str, url_idx: int, input_tokens: int, output_tokens: int, cost: float = 0.0):
+    async def record_usage(user_id: str, url_idx: int, input_tokens: int, output_tokens: int, cost: float = 0.0, user: Any = None):
         """API 사용량을 기록"""
         try:
+            # 관리자는 기록하지 않음
+            if user is not None and hasattr(user, 'role') and user.role == 'admin':
+                return
+
             if not APIUsageTracker.is_external_api(url_idx):
                 return
             

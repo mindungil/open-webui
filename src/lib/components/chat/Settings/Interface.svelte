@@ -11,9 +11,9 @@
 
 	export let saveSettings: Function;
 
-	let backgroundImageUrl = null;
-	let inputFiles = null;
-	let filesInputElement;
+	let backgroundImageUrl: string | null = null;
+	let inputFiles: FileList | null = null;
+	let filesInputElement: HTMLInputElement;
 
 	// Addons
 	let titleAutoGenerate = true;
@@ -67,10 +67,32 @@
 	let voiceInterruption = false;
 	let hapticFeedback = false;
 
-	let webSearch = null;
+	let webSearch: string | null = null;
 
 	let iframeSandboxAllowSameOrigin = false;
 	let iframeSandboxAllowForms = false;
+
+	// Font size settings
+	let fontSize: 'small' | 'medium' | 'large' | 'xlarge' = 'medium';
+	const fontSizes = {
+		small: '0.875rem',    // 14px
+		medium: '1rem',       // 16px
+		large: '1.125rem',    // 18px
+		xlarge: '1.25rem'     // 20px
+	} as const;
+
+	const fontSizeLabels = {
+		small: '작게',
+		medium: '중간',
+		large: '크게',
+		xlarge: '매우크게'
+	} as const;
+
+	const toggleFontSize = async (size: keyof typeof fontSizes) => {
+		fontSize = size;
+		document.documentElement.style.setProperty('--font-size-base', fontSizes[size]);
+		saveSettings({ fontSize });
+	};
 
 	const toggleExpandDetails = () => {
 		expandDetails = !expandDetails;
@@ -286,12 +308,12 @@
 
 	onMount(async () => {
 		titleAutoGenerate = $settings?.title?.auto ?? true;
-		autoTags = $settings.autoTags ?? true;
+		autoTags = $settings?.autoTags ?? true;
 
-		highContrastMode = $settings.highContrastMode ?? false;
+		highContrastMode = $settings?.highContrastMode ?? false;
 
-		detectArtifacts = $settings.detectArtifacts ?? true;
-		responseAutoCopy = $settings.responseAutoCopy ?? false;
+		detectArtifacts = $settings?.detectArtifacts ?? true;
+		responseAutoCopy = $settings?.responseAutoCopy ?? false;
 
 		showUsername = $settings.showUsername ?? false;
 		showUpdateToast = $settings.showUpdateToast ?? true;
@@ -337,6 +359,10 @@
 
 		backgroundImageUrl = $settings.backgroundImageUrl ?? null;
 		webSearch = $settings.webSearch ?? null;
+
+		// Initialize font size
+		fontSize = $settings.fontSize ?? 'medium';
+		document.documentElement.style.setProperty('--font-size-base', fontSizes[fontSize]);
 	});
 </script>
 
@@ -378,6 +404,25 @@
 	<div class=" space-y-3 overflow-y-scroll max-h-[28rem] lg:max-h-full">
 		<div>
 			<div class=" mb-1.5 text-sm font-medium">{$i18n.t('UI')}</div>
+
+			<div class=" py-0.5 flex w-full justify-between">
+				<div class=" self-center text-xs">{$i18n.t('글씨 크기')}</div>
+				<div class="flex items-center relative">
+					<select
+						class="dark:bg-gray-900 w-fit pr-8 rounded-sm px-2 p-1 text-xs bg-transparent outline-hidden text-right"
+						bind:value={fontSize}
+						on:change={() => {
+							if (fontSize === 'small' || fontSize === 'medium' || fontSize === 'large' || fontSize === 'xlarge') {
+								toggleFontSize(fontSize);
+							}
+						}}
+					>
+						{#each Object.entries(fontSizeLabels) as [size, label]}
+							<option value={size}>{label}</option>
+						{/each}
+					</select>
+				</div>
+			</div>
 
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">

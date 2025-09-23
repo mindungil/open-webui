@@ -2716,7 +2716,7 @@ IMAGE_GENERATION_MODEL = PersistentConfig(
 WHISPER_MODEL = PersistentConfig(
     "WHISPER_MODEL",
     "audio.stt.whisper_model",
-    os.getenv("WHISPER_MODEL", "base"),
+    os.getenv("WHISPER_MODEL", "large-v3"),
 )
 
 WHISPER_MODEL_DIR = os.getenv("WHISPER_MODEL_DIR", f"{CACHE_DIR}/whisper/models")

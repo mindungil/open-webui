@@ -4,6 +4,8 @@ import json
 import logging
 import os
 import uuid
+import re
+from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
 from pydub import AudioSegment, effects
@@ -15,8 +17,7 @@ import torch
 from tqdm import tqdm
 import concurrent.futures
 import gc
-from nsnet2_denoiser import NSnet2Enhancer as  NSNet2Denoiser
-import soundfile as sf
+
 
 import aiohttp
 import aiofiles
@@ -66,7 +67,7 @@ from transformers import pipeline as whisper_pipeline
 router = APIRouter()
 
 # Constants
-MAX_FILE_SIZE_MB = 50
+MAX_FILE_SIZE_MB = 25
 MAX_FILE_SIZE = MAX_FILE_SIZE_MB * 1024 * 1024  # Convert MB to bytes
 AZURE_MAX_FILE_SIZE_MB = 200
 AZURE_MAX_FILE_SIZE = AZURE_MAX_FILE_SIZE_MB * 1024 * 1024  # Convert MB to bytes
@@ -139,6 +140,11 @@ def set_faster_whisper_model(model: str, auto_update: bool = False):
     if model:
         from faster_whisper import WhisperModel
 
+        # 모델 디렉토리가 존재하는지 확인하고 생성
+        if not os.path.exists(WHISPER_MODEL_DIR):
+            os.makedirs(WHISPER_MODEL_DIR, exist_ok=True)
+            log.info(f"Whisper 모델 디렉토리 생성: {WHISPER_MODEL_DIR}")
+
         faster_whisper_kwargs = {
             "model_size_or_path": model,
             "device": DEVICE_TYPE if DEVICE_TYPE and DEVICE_TYPE == "cuda" else "cpu",
@@ -148,13 +154,20 @@ def set_faster_whisper_model(model: str, auto_update: bool = False):
         }
 
         try:
+            log.info(f"Faster-Whisper 모델 로딩 시도: {model}")
             whisper_model = WhisperModel(**faster_whisper_kwargs)
-        except Exception:
+            log.info(f"Faster-Whisper 모델 로딩 성공: {model}")
+        except Exception as e:
             log.warning(
-                "WhisperModel initialization failed, attempting download with local_files_only=False"
+                f"WhisperModel 초기화 실패 ({model}), local_files_only=False로 재시도: {str(e)}"
             )
             faster_whisper_kwargs["local_files_only"] = False
-            whisper_model = WhisperModel(**faster_whisper_kwargs)
+            try:
+                whisper_model = WhisperModel(**faster_whisper_kwargs)
+                log.info(f"Faster-Whisper 모델 로딩 성공 (재시도): {model}")
+            except Exception as e2:
+                log.error(f"Faster-Whisper 모델 로딩 최종 실패: {str(e2)}")
+                raise
     return whisper_model
 
 
@@ -541,87 +554,29 @@ async def speech(request: Request, user=Depends(get_verified_user)):
 
         return FileResponse(file_path)
 
-def filter_repetitive_text(text, min_repeat=5, max_repeat_ratio=0.9):
-    """
-    반복되는 텍스트를 필터링하는 함수 (완화된 버전)
-    - min_repeat: 연속 반복 최소 횟수 (5회로 증가)
-    - max_repeat_ratio: 전체 텍스트에서 반복 부분이 차지하는 최대 비율 (0.9로 증가)
-    """
-    if not text or len(text.strip()) == 0:
-        return text  # 빈 텍스트도 반환
-    
-    words = text.split()
-    if len(words) < min_repeat:
-        return text
-    
-    # 1. 연속된 동일 단어 제거 (완화된 버전)
-    filtered_words = []
-    prev_word = None
-    repeat_count = 0
-    
-    for word in words:
-        if word == prev_word:
-            repeat_count += 1
-            if repeat_count < min_repeat:  # 5번까지는 허용
-                filtered_words.append(word)
-        else:
-            filtered_words.append(word)
-            repeat_count = 0
-        prev_word = word
-    
-    # 2. 전체 텍스트가 반복으로만 이루어져 있는지 확인 (완화된 버전)
-    filtered_text = " ".join(filtered_words)
-    unique_words = set(filtered_words)
-    
-    # 고유 단어가 너무 적으면 (반복이 심하면) 대표 문구만 남김 (완화된 버전)
-    if len(unique_words) <= 2 and len(filtered_words) > 15:  # 조건 완화
-        # 가장 흔한 단어 조합 찾기
-        from collections import Counter
-        word_pairs = [f"{filtered_words[i]} {filtered_words[i+1]}" 
-                     for i in range(len(filtered_words)-1)]
-        most_common = Counter(word_pairs).most_common(1)
-        
-        if most_common and most_common[0][1] > len(filtered_words) * 0.5:  # 비율 완화
-            return most_common[0][0]  # 가장 흔한 조합만 반환
-    
-    return filtered_text
-
-
 def convert_to_wav(input_path):
-    try:
-        audio = AudioSegment.from_file(input_path)
-        # 노이즈 제거 및 오디오 품질 개선
-        audio = effects.normalize(audio)
-        ## 볼륨 부스트 (약한 소리도 잘 인식하도록)
-        audio = audio + 6  # dB 부스트
-        # 샘플레이트 조정 (16kHz가 Whisper에 최적)
-        audio = audio.set_frame_rate(16000)
-        # 모노로 변환 (스테레오는 Whisper에서 불필요)
-        audio = audio.set_channels(1)
-        
-        output_path = os.path.splitext(input_path)[0] + ".wav"
-        audio.export(output_path, format="wav", parameters=["-ar", "16000"])
-        log.info(f"WAV 변환 완료: {output_path}")
-        return output_path
-    except Exception as e:
-        log.error(f"WAV 변환 실패: {str(e)}")
-        raise
+        try:
+            audio = AudioSegment.from_file(input_path)
+            audio = effects.normalize(audio)
+            output_path = os.path.splitext(input_path)[0] + ".wav"
+            audio.export(output_path, format="wav")
+            log.info(f"WAV 변환 완료: {output_path}")
+            return output_path
+        except Exception as e:
+            log.error(f"WAV 변환 실패: {str(e)}")
+            raise
 
-def split_audio(audio_path, min_silence_len=300, silence_thresh=-35, max_chunk_ms=25000, min_chunk_ms=2000):
+# 무음을 기준으로 오디오 분할 (짧은 청크 병합, 긴 청크 슬라이스)
+# --> 적응형 라이브러리 있어서 변경 예정
+def split_audio(audio_path, min_silence_len=500, silence_thresh=-40, max_chunk_ms=30000, min_chunk_ms=3000):
     try:
         audio = AudioSegment.from_wav(audio_path)
-        
-        # 오디오 전처리
-        audio = effects.normalize(audio)
-        audio = audio + 3  # 약간의 볼륨 부스트
-        
-        # 무음 기준 분할 (파라미터 조정)
+
+        # 무음 기준 분할
         raw_chunks = split_on_silence(
             audio,
-            min_silence_len=min_silence_len,  # 무음 최소 길이 감소
-            silence_thresh=silence_thresh,    # 무음 임계값 상향 조정
-            keep_silence=200,                 # 무음 구간 일부 유지
-            seek_step=1                       # 더 세밀한 무음 탐지
+            min_silence_len=min_silence_len,
+            silence_thresh=silence_thresh
         )
 
         # 너무 짧은 청크 합치기
@@ -647,200 +602,154 @@ def split_audio(audio_path, min_silence_len=300, silence_thresh=-35, max_chunk_m
 
         # 너무 긴 청크는 나누기
         final_chunks = []
-        current_position = 0
-        
         for chunk in merged_chunks:
             if len(chunk) > max_chunk_ms:
                 for i in range(0, len(chunk), max_chunk_ms):
                     sliced = chunk[i:i + max_chunk_ms]
                     if len(sliced) >= min_chunk_ms:
-                        final_chunks.append({
-                            'chunk': sliced,
-                            'start_ms': current_position + i,
-                            'end_ms': current_position + i + len(sliced)
-                        })
+                        final_chunks.append(sliced)
             else:
-                final_chunks.append({
-                    'chunk': chunk,
-                    'start_ms': current_position,
-                    'end_ms': current_position + len(chunk)
-                })
-            current_position += len(chunk)
+                final_chunks.append(chunk)
 
         # 분할된 청크 WAV로 저장
-        chunk_paths_with_time = []
-        for i, chunk_info in enumerate(final_chunks):
+        chunk_paths = []
+        for i, chunk in enumerate(final_chunks):
             chunk_path = f"{os.path.splitext(audio_path)[0]}_chunk_sil_{i}.wav"
-            chunk_info['chunk'].export(chunk_path, format="wav")
-            chunk_paths_with_time.append({
-                'path': chunk_path,
-                'start_ms': chunk_info['start_ms'],
-                'end_ms': chunk_info['end_ms']
-            })
+            chunk.export(chunk_path, format="wav")
+            chunk_paths.append(chunk_path)
 
-        log.info(f"총 {len(chunk_paths_with_time)}개의 청크로 분할 완료 (무음 기준 + 병합 + 슬라이스)")
-        return chunk_paths_with_time
+        log.info(f"총 {len(chunk_paths)}개의 청크로 분할 완료 (무음 기준 + 병합 + 슬라이스)")
+        return chunk_paths
 
     except Exception as e:
         log.error(f"오디오 분할 실패: {str(e)}")
         raise
 
+# 한 청크 Whisper STT 수행
 def process_chunk(chunk_path, pipe):
     try:
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
             gc.collect()
-        
-        #model = NSNet2Denoiser()
-        #noisy, sr = sf.read(chunk_path)
-        #clean = model(noisy, sr)
-        #sf.write(chunk_path, clean, sr)
-
-        # Whisper 파라미터 최적화 (최소 필수 파라미터만 사용)
-        result = pipe(
-            chunk_path,
-            chunk_length_s=30,           # 청크 길이 제한
-            stride_length_s=5,           # 오버랩 구간
-            batch_size=16,              # 배치 크기 증가
-            return_timestamps=True       # 타임스탬프 반환
-        )
-        
-        # 결과 후처리
-        text = result.get('text', '').strip()
-        # 연속된 공백 제거
-        text = ' '.join(text.split())
-        return text
+        result = pipe(chunk_path)
+        return result.get('text', '').strip()
     except Exception as e:
         log.error(f"청크 처리 실패 ({chunk_path}): {str(e)}")
         return ""
 
 def convert_seconds_to_hms(seconds):
-    """Convert seconds to HH:MM:SS format"""
-    hours = int(seconds // 3600)
-    minutes = int((seconds % 3600) // 60)
-    seconds = int(seconds % 60)
-    return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+    """초를 HH:MM:SS 형식으로 변환 (분 단위로 반올림)"""
+    # 회의록에서는 초 단위까지 필요없으므로 분 단위로 반올림
+    total_seconds = round(seconds)
+    hours = total_seconds // 3600
+    minutes = (total_seconds % 3600) // 60
+    seconds = total_seconds % 60
+
+    if hours > 0:
+        return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+    else:
+        return f"{minutes:02d}:{seconds:02d}"
 
 # 전체 진행 함수
-# 첫 번째 코드 기반으로 개선된 전체 진행 함수
-def transcribe_long_audio(request: Request, file_path, model_name='openai/whisper-large-v3'):
+def transcribe_long_audio(request: Request, file_path, model_name='large-v3'):
     try:
         # GPU 리소스 정리
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
             gc.collect()
             torch.backends.cudnn.benchmark = True
-            torch.backends.cudnn.deterministic = False  # 성능 향상을 위해 비결정적 모드 사용
 
-        # 오디오 WAV로 변환 (개선된 전처리)
+        # 오디오 WAV로 변환
         wav_path = convert_to_wav(file_path)
 
         # 디바이스 설정 (GPU or CPU)
         device = 0 if torch.cuda.is_available() else -1
-        log.info(f"Whisper 실행 중 (Device: {'GPU' if device == 0 else 'CPU'})")
+        log.info(f"Faster-Whisper 실행 중 (Device: {'GPU' if device == 0 else 'CPU'})")
 
-        # Whisper 파이프라인 로딩 (최적화된 설정)
-        log.info("Whisper 파이프라인 로딩 중...")
-        whisper = whisper_pipeline(
-            "automatic-speech-recognition",
-            model=model_name,
-            device=device,
-            torch_dtype=torch.float16 if device == 0 else torch.float32,  # GPU에서 fp16 사용
-            model_kwargs={"use_cache": True}  # 캐시 사용으로 성능 향상
+        # Faster-Whisper 모델 로딩
+        log.info("Faster-Whisper 모델 로딩 중...")
+
+        # 설정에서 모델 가져오기 (기본값: large-v3 모델)
+        whisper_model_name = request.app.state.config.WHISPER_MODEL or "large-v3"
+        log.info(f"사용할 모델: {whisper_model_name}")
+
+        # 기존 모델이 있으면 사용, 없으면 새로 생성
+        if request.app.state.faster_whisper_model is None:
+            try:
+                request.app.state.faster_whisper_model = set_faster_whisper_model(
+                    whisper_model_name,
+                    WHISPER_MODEL_AUTO_UPDATE
+                )
+            except Exception as e:
+                log.warning(f"설정된 모델 로딩 실패, 기본 모델로 시도: {str(e)}")
+                # 기본 모델로 재시도
+                request.app.state.faster_whisper_model = set_faster_whisper_model(
+                    "large-v3",
+                    True  # 자동 업데이트 활성화
+                )
+
+        whisper = request.app.state.faster_whisper_model
+
+        if whisper is None:
+            raise RuntimeError("Faster-Whisper 모델을 로드할 수 없습니다.")
+
+        # 회의록에 최적화된 VAD 설정으로 전체 파일 처리
+        log.info("회의록 최적화 설정으로 Faster-Whisper 처리 중...")
+        segments, info = whisper.transcribe(
+            wav_path,
+            beam_size=5,
+            vad_filter=True,  # VAD 활성화
+            vad_parameters=dict(
+                min_silence_duration_ms=1000,  # 5초 무음 (기존 3초→5초, 더 엄격하게)
+                speech_pad_ms=200,             # 0.2초 패딩 (기존 0.5초→0.2초, 더 정확하게)
+                threshold=0.7                  # 0.7 임계값 (기존 0.5→0.7, 더 엄격하게)
+            ),
+            language="ko",
+            # 회의록 품질 향상을 위한 추가 설정
+            condition_on_previous_text=False,  # 이전 텍스트 의존성 제거
+            compression_ratio_threshold=2.4,   # 반복 패턴 감지
+            no_speech_threshold=0.7,          # 무음 구간 더 엄격하게 (기존 0.6→0.7)
+            temperature=0.0,                  # 일관성 있는 출력
+            initial_prompt="이것은 한국어 회의 녹음입니다. 정확하고 자연스러운 문장으로 전사해주세요."
         )
 
-        # 오디오 청크로 분할 (최적화된 파라미터)
-        log.info("오디오 파일을 청크로 분할 중...")
-        chunk_infos = split_audio(wav_path)
+        log.info(f"언어 감지: {info.language} (확률: {info.language_probability:.2f})")
 
-        # 청크별 STT 처리 (병렬 처리 최적화)
-        log.info("STT 처리 중...")
+        # 세그먼트 후처리 및 병합
+        merged_segments = merge_short_segments(segments)
+
+        # 결과 처리
         results = []
-        segments = []
-        batch_size = 4  # 배치 크기 증가
+        segments_list = []
 
-        # GPU 메모리 사용량에 따라 동적으로 워커 수 조정
-        max_workers = min(4, os.cpu_count() or 1) if torch.cuda.is_available() else 2
-        
-        for i in range(0, len(chunk_infos), batch_size):
-            batch_chunk_infos = chunk_infos[i:i + batch_size]
-            batch_results = []
+        for segment in merged_segments:
+            text = segment['text']
+            if text and len(text) > 3:  # 3글자 이상만 포함
+                # 반복 패턴 제거
+                text = filter_repetitive_text(text)
+                if text:  # 필터링 후에도 텍스트가 남아있으면
+                    results.append(text)
+                    segments_list.append({
+                        "start": convert_seconds_to_hms(segment['start']),
+                        "end": convert_seconds_to_hms(segment['end']),
+                        "text": text
+                    })
 
-            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-                future_to_chunk = {
-                    executor.submit(process_chunk, chunk_info['path'], whisper): (idx, chunk_info) 
-                    for idx, chunk_info in enumerate(batch_chunk_infos)
-                }
-
-                for future in tqdm(concurrent.futures.as_completed(future_to_chunk), total=len(batch_chunk_infos)):
-                    chunk_idx, chunk_info = future_to_chunk[future]
-                    try:
-                        result = future.result()
-                        if result.strip():  # 빈 결과가 아닌 경우만 추가
-                            batch_results.append((chunk_idx, result))
-                            
-                            start_time = chunk_info['start_ms'] / 1000.0
-                            end_time = chunk_info['end_ms'] / 1000.0
-                            
-                            segments.append({
-                                "start": convert_seconds_to_hms(start_time),
-                                "end": convert_seconds_to_hms(end_time),
-                                "text": result.strip()
-                            })
-                    except Exception as e:
-                        log.error(f"청크 처리 실패: {str(e)}")
-                        batch_results.append((chunk_idx, ""))
-
-            # 청크 순서대로 정렬하여 결과 저장
-            batch_results.sort(key=lambda x: x[0])
-            results.extend([r[1] for r in batch_results])
-
-            # GPU 메모리 정리
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-                gc.collect()
-
-        # 전체 텍스트 통합 (필터링 제거)
+        # 전체 텍스트 통합
         plain_text = " ".join(results)
 
-        # 세그먼트를 시작 시간 기준으로 정렬
-        segments.sort(key=lambda x: (
-            int(x['start'].split(':')[0]),  # hours
-            int(x['start'].split(':')[1]),  # minutes
-            int(x['start'].split(':')[2])   # seconds
-        ))
+        # 향상된 docx 문서 생성
+        doc = create_enhanced_meeting_document(segments_list)
 
-        # docx 문서 생성
-        doc = Document()
-        doc.add_heading('회의록', 0)
-        
-        # 스타일 설정
-        style = doc.styles['Normal']
-        style.font.name = '맑은 고딕'
-        style.font.size = Pt(11)
-
-        # 세그먼트 정보를 포함한 스크립트 생성
-        for segment in segments:
-            p = doc.add_paragraph()
-            p.add_run(f"[{segment['start']} - {segment['end']}] ").bold = True
-            p.add_run(segment['text'])
-
-        # 임시 청크 파일 삭제
-        for chunk_info in chunk_infos:
-            try:
-                os.remove(chunk_info['path'])
-            except:
-                pass
-
-        log.info("STT 처리 완료")
+        log.info("Faster-Whisper STT 처리 완료")
         return {
             'plain_text': plain_text,
             'docx_document': doc,
-            'segments': segments
+            'segments': segments_list
         }
 
     except Exception as e:
-        log.error(f"STT 처리 실패: {str(e)}")
+        log.error(f"Faster-Whisper STT 처리 실패: {str(e)}")
         raise
 
 def transcription_handler(request, file_path, metadata):
@@ -889,6 +798,7 @@ def transcription_handler(request, file_path, metadata):
 
         log.debug(data)
         return data
+
 
 def transcribe(request: Request, file_path: str, metadata: Optional[dict] = None, filedata: list = None):
     log.info(f"transcribe: {file_path} {metadata}")
@@ -1212,3 +1122,130 @@ async def get_voices(request: Request, user=Depends(get_verified_user)):
             {"id": k, "name": v} for k, v in get_available_voices(request).items()
         ]
     }
+
+def merge_short_segments(segments, min_duration=5.0, max_duration=30.0):
+    """짧은 세그먼트를 의미 있는 단위로 병합"""
+    merged = []
+    current_segment = None
+
+    for segment in segments:
+        duration = segment.end - segment.start
+
+        if current_segment is None:
+            current_segment = {
+                'start': segment.start,
+                'end': segment.end,
+                'text': segment.text.strip()
+            }
+        else:
+            # 현재 세그먼트와 병합할지 결정
+            combined_duration = segment.end - current_segment['start']
+
+            # 병합 조건:
+            # 1. 현재 세그먼트가 너무 짧음 (5초 미만)
+            # 2. 병합해도 최대 길이를 초과하지 않음 (30초 미만)
+            # 3. 세그먼트 간 간격이 3초 미만
+            gap = segment.start - current_segment['end']
+
+            if (duration < min_duration or
+                combined_duration < max_duration and gap < 3.0):
+                # 세그먼트 병합
+                merged_text = current_segment['text'] + " " + segment.text.strip()
+                current_segment = {
+                    'start': current_segment['start'],
+                    'end': segment.end,
+                    'text': merged_text
+                }
+            else:
+                # 현재 세그먼트 저장하고 새로운 세그먼트 시작
+                merged.append(current_segment)
+                current_segment = {
+                    'start': segment.start,
+                    'end': segment.end,
+                    'text': segment.text.strip()
+                }
+
+    # 마지막 세그먼트 추가
+    if current_segment is not None:
+        merged.append(current_segment)
+
+    log.info(f"세그먼트 병합: {len(list(segments))}개 → {len(merged)}개")
+    return merged
+
+
+def filter_repetitive_text(text, max_repeat=2):
+    """반복 패턴 및 의미없는 텍스트 제거"""
+    if not text or not text.strip():
+        return ""
+
+    # 1. 과도한 문자 반복 제거 ("네네네네" → "네")
+    text = re.sub(r'(.)\1{3,}', r'\1', text)
+
+    # 2. 단어 반복 제거 ("그니까 그니까 그니까" → "그니까")
+    words = text.split()
+    filtered_words = []
+
+    for word in words:
+        # 연속된 같은 단어 제거
+        if len(filtered_words) >= max_repeat:
+            recent_words = filtered_words[-max_repeat:]
+            if all(w == word for w in recent_words):
+                continue
+        filtered_words.append(word)
+
+    # 3. 의미없는 추임새나 잡음 제거
+    meaningless_patterns = [
+        r'\b(응+|어+|음+|그+|뭐+)\b',  # "응응응", "어어어" 등
+        r'\b(네+|예+)\s*\b(?=\s*\b(네+|예+)\b)',  # 연속된 "네네네"
+        r'\b\w\b(?=\s*\b\w\b\s*\b\w\b)',  # 연속된 한글자 단어 3개 이상
+    ]
+
+    result_text = " ".join(filtered_words)
+    for pattern in meaningless_patterns:
+        result_text = re.sub(pattern, '', result_text)
+
+    # 4. 공백 정리
+    result_text = re.sub(r'\s+', ' ', result_text).strip()
+
+    return result_text
+
+
+def create_enhanced_meeting_document(segments_list):
+    """향상된 회의록 문서 생성"""
+    doc = Document()
+
+    # 제목 스타일 설정
+    title = doc.add_heading('회의록', 0)
+    title_format = title.runs[0].font
+    title_format.name = '맑은 고딕'
+    title_format.size = Pt(18)
+    title_format.color.rgb = RGBColor(0, 0, 0)
+
+    # 생성 정보 추가
+    info_para = doc.add_paragraph()
+    info_para.add_run(f"생성일시: {datetime.now().strftime('%Y년 %m월 %d일 %H:%M')}")
+    info_para.add_run(f"\n총 발언 구간: {len(segments_list)}개")
+
+    # 구분선
+    doc.add_paragraph("=" * 60)
+
+    # 세그먼트별 내용 추가
+    for i, segment in enumerate(segments_list, 1):
+        p = doc.add_paragraph()
+
+        # 시간 정보 (굵게, 파란색)
+        time_run = p.add_run(f"[{segment['start']} - {segment['end']}] ")
+        time_run.bold = True
+        time_run.font.color.rgb = RGBColor(0, 100, 200)
+        time_run.font.size = Pt(10)
+
+        # 내용 (일반 텍스트)
+        content_run = p.add_run(segment['text'])
+        content_run.font.name = '맑은 고딕'
+        content_run.font.size = Pt(11)
+
+        # 10개마다 구분선 추가
+        if i % 10 == 0 and i < len(segments_list):
+            doc.add_paragraph("-" * 40)
+
+    return doc

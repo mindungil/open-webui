@@ -39,5 +39,24 @@ export default defineConfig({
 	},
 	worker: {
 		format: 'es'
-	}
+	},
+	server: {
+    		host: true,
+    			allowedHosts: ['ai.jb.go.kr', 'ai1.jb.go.kr'],
+    	proxy: {
+      		'/v1': {
+        			target: 'http://127.0.0.1:8080',  // 백엔드
+        			changeOrigin: true,
+        			ws: true,
+      			},
+      		'/api': {
+        			target: 'http://127.0.0.1:8080',
+        			changeOrigin: true,
+        			ws: true,
+      			}
+    		}
+  	},
+  	preview: {
+    		allowedHosts: ['ai.jb.go.kr', 'ai1.jb.go.kr'],
+  	}
 });

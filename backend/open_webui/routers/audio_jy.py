@@ -11,11 +11,12 @@ from pydub.silence import split_on_silence
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 from transformers import pipeline
-import torch
+import torch, numpy as np
 from tqdm import tqdm
 import concurrent.futures
 import gc
-
+from silero_vad import load_silero_vad, read_audio, get_speech_timestamps
+from df.enhance import init_df
 
 import aiohttp
 import aiofiles
@@ -540,173 +541,287 @@ async def speech(request: Request, user=Depends(get_verified_user)):
 
         return FileResponse(file_path)
 
-def filter_repetitive_text(text, min_repeat=5, max_repeat_ratio=0.9):
+def filter_repetitive_text(text, min_repeat=3, max_repeat_ratio=0.7):
     """
-    반복되는 텍스트를 필터링하는 함수 (완화된 버전)
-    - min_repeat: 연속 반복 최소 횟수 (5회로 증가)
-    - max_repeat_ratio: 전체 텍스트에서 반복 부분이 차지하는 최대 비율 (0.9로 증가)
+    반복되는 텍스트를 필터링하는 함수
+    - min_repeat: 연속 반복 최소 횟수
+    - max_repeat_ratio: 전체 텍스트에서 반복 부분이 차지하는 최대 비율
     """
     if not text or len(text.strip()) == 0:
-        return text  # 빈 텍스트도 반환
-    
+        return ""
+
     words = text.split()
     if len(words) < min_repeat:
         return text
-    
-    # 1. 연속된 동일 단어 제거 (완화된 버전)
+
+    # 1. 연속된 동일 단어 제거
     filtered_words = []
     prev_word = None
     repeat_count = 0
-    
+
     for word in words:
         if word == prev_word:
             repeat_count += 1
-            if repeat_count < min_repeat:  # 5번까지는 허용
+            if repeat_count < min_repeat:  # 3번까지는 허용
                 filtered_words.append(word)
         else:
             filtered_words.append(word)
             repeat_count = 0
         prev_word = word
-    
-    # 2. 전체 텍스트가 반복으로만 이루어져 있는지 확인 (완화된 버전)
+
+    # 2. 전체 텍스트가 반복으로만 이루어져 있는지 확인
     filtered_text = " ".join(filtered_words)
     unique_words = set(filtered_words)
-    
-    # 고유 단어가 너무 적으면 (반복이 심하면) 대표 문구만 남김 (완화된 버전)
-    if len(unique_words) <= 2 and len(filtered_words) > 15:  # 조건 완화
+
+    # 고유 단어가 너무 적으면 (반복이 심하면) 대표 문구만 남김
+    if len(unique_words) <= 3 and len(filtered_words) > 10:
         # 가장 흔한 단어 조합 찾기
         from collections import Counter
-        word_pairs = [f"{filtered_words[i]} {filtered_words[i+1]}" 
+        word_pairs = [f"{filtered_words[i]} {filtered_words[i+1]}"
                      for i in range(len(filtered_words)-1)]
         most_common = Counter(word_pairs).most_common(1)
-        
-        if most_common and most_common[0][1] > len(filtered_words) * 0.5:  # 비율 완화
+
+        if most_common and most_common[0][1] > len(filtered_words) * 0.3:
             return most_common[0][0]  # 가장 흔한 조합만 반환
-    
+
     return filtered_text
+
+
+def control_RMS(input_path):
+    try:
+        audio = AudioSegment.from_file(input_path)
+        
+        avg_rms = audio.dBFS
+        if avg_rms < -35:   # 전체가 너무 작다?
+            # 10 dB 범위 안에서만 한 번 전체 부스트
+            gain = min(-25 - avg_rms, 10)
+            audio = audio.apply_gain(gain)
+        
+        log.info(audio.dBFS)
+        audio.export(input_path, format="wav")
+        return input_path
+    
+    except Exception as e:
+        log.error(f"WAV 변환 실패: {str(e)}")
+        raise
+
 
 
 def convert_to_wav(input_path):
     try:
         audio = AudioSegment.from_file(input_path)
+        log.info(audio.dBFS)
+
+                
         # 노이즈 제거 및 오디오 품질 개선
-        audio = effects.normalize(audio)
+        audio = effects.normalize(audio, headroom=3.0)
+        log.info(audio.dBFS)
         # 볼륨 부스트 (약한 소리도 잘 인식하도록)
-        audio = audio + 6  # dB 부스트
+        audio = audio + 2.5  # dB 부스트
+
+        TARGET_RMS = -20.0
+        PEAK_LIMIT = -1.0
+        # ── 1) 피크를 -1 dBFS 이하로 한 번 정렬 ──────────────────
+        audio = effects.normalize(audio, headroom=abs(PEAK_LIMIT))
+
+        # ── 2) 현재 RMS를 계산해 목표 RMS(-20 dBFS)까지 게인 적용 ──
+        current_rms  = audio.dBFS
+        gain_needed  = TARGET_RMS - current_rms   # dB 단위
+        audio        = audio.apply_gain(gain_needed)
+
+        # 게인 후 피크가 다시 튈 수 있으므로 한 번 더 체크
+        if audio.max_dBFS > PEAK_LIMIT:
+            audio = effects.normalize(audio, headroom=abs(PEAK_LIMIT))
+
+        
         # 샘플레이트 조정 (16kHz가 Whisper에 최적)
         audio = audio.set_frame_rate(16000)
+        log.info(audio.dBFS)
         # 모노로 변환 (스테레오는 Whisper에서 불필요)
         audio = audio.set_channels(1)
-        
+
         output_path = os.path.splitext(input_path)[0] + ".wav"
-        audio.export(output_path, format="wav", parameters=["-ar", "16000"])
+        audio.export(output_path, format="wav")
+
         log.info(f"WAV 변환 완료: {output_path}")
         return output_path
     except Exception as e:
         log.error(f"WAV 변환 실패: {str(e)}")
         raise
 
-def split_audio(audio_path, min_silence_len=300, silence_thresh=-35, max_chunk_ms=25000, min_chunk_ms=2000):
+# pip install silero-vad    ← 한 번만 설치
+def split_audio_with_timestamps_vad(
+        audio_path: str,
+        max_chunk_ms: int = 30000,       # Whisper 입력 30 s
+        min_chunk_ms: int = 100,        # 0.1s 미만 버림
+        padding_ms: int = 200):          # 경계 패딩(±0.2 s)
+    """
+    Silero VAD 기반 오디오 분할:
+      • 음성 구간을 NN-VAD로 탐지
+      • 너무 긴 구간(>20 s)은 20 s 단위 슬라이스
+      • 각 청크를 WAV로 저장 + 절대 타임스탬프 반환
+    """
     try:
-        audio = AudioSegment.from_wav(audio_path)
-        
-        # 오디오 전처리
-        audio = effects.normalize(audio)
-        audio = audio + 3  # 약간의 볼륨 부스트
-        
-        # 무음 기준 분할 (파라미터 조정)
-        raw_chunks = split_on_silence(
-            audio,
-            min_silence_len=min_silence_len,  # 무음 최소 길이 감소
-            silence_thresh=silence_thresh,    # 무음 임계값 상향 조정
-            keep_silence=200,                 # 무음 구간 일부 유지
-            seek_step=1                       # 더 세밀한 무음 탐지
-        )
+        # 0) 오디오 → PyTorch Tensor (16 kHz mono PCM  in float32, -1..1)
+        full_audio = AudioSegment.from_wav(audio_path)
+        samples = np.array(full_audio.get_array_of_samples()).astype(np.float32) / 32768
+        wav_tensor = torch.from_numpy(samples).unsqueeze(0)  # (1, T)
 
-        # 너무 짧은 청크 합치기
-        def merge_short_chunks(chunks):
-            merged = []
-            buffer = None
-            for chunk in chunks:
-                if len(chunk) < min_chunk_ms:
-                    if buffer is not None:
-                        buffer += chunk
-                    else:
-                        buffer = chunk
-                else:
-                    if buffer is not None:
-                        chunk = buffer + chunk
-                        buffer = None
-                    merged.append(chunk)
-            if buffer is not None:
-                merged.append(buffer)
-            return merged
-
-        merged_chunks = merge_short_chunks(raw_chunks)
-
-        # 너무 긴 청크는 나누기
-        final_chunks = []
-        current_position = 0
+        # 1) silero-vad 모델 로드 & 추론
+        model = load_silero_vad()                 # 첫 호출 시 다운로드
+        speech_segments = get_speech_timestamps(
+            wav_tensor, model,
+            threshold = 0.16,
+            speech_pad_ms=padding_ms,
+            min_speech_duration_ms= 250,
+            min_silence_duration_ms=500)      # ← 인자로 받은 padding_ms 활용
         
-        for chunk in merged_chunks:
-            if len(chunk) > max_chunk_ms:
+
+        log.info(speech_segments)
+        speech_segments = [[seg["start"] / 16, seg["end"] / 16] for seg in speech_segments]
+        
+        if not speech_segments:
+            log.warning("음성 구간이 탐지되지 않았습니다.")
+            return []
+        log.info(speech_segments)
+        
+        merged = []
+        for s, e in merged:
+            if merged and s - merged[-1][1] < 120:           # gap < 0.25 s
+                merged[-1][1] = e
+            else:
+                merged.append([s, e])
+        
+        chunk_info = []
+
+        for start_ms, end_ms in speech_segments:
+            # 실제 음성 구간 추출
+            chunk = full_audio[start_ms:end_ms]
+
+            chunk_info.append({
+                'chunk': chunk,
+                'start_ms': start_ms,
+                'end_ms': end_ms,
+                'duration_ms': len(chunk)
+            })
+
+        # 너무 긴 청크는 나누기 (시간 정보 유지)
+        final_chunk_info = []
+        for info in chunk_info:
+            if info['duration_ms'] > max_chunk_ms:
+                chunk = info['chunk']
+                start_time = info['start_ms']
+
+                # 최대 청크 길이로 나누기
                 for i in range(0, len(chunk), max_chunk_ms):
                     sliced = chunk[i:i + max_chunk_ms]
                     if len(sliced) >= min_chunk_ms:
-                        final_chunks.append({
+                        slice_start = start_time + i
+                        slice_end = slice_start + len(sliced)
+
+                        final_chunk_info.append({
                             'chunk': sliced,
-                            'start_ms': current_position + i,
-                            'end_ms': current_position + i + len(sliced)
+                            'start_ms': slice_start,
+                            'end_ms': slice_end,
+                            'duration_ms': len(sliced)
                         })
             else:
-                final_chunks.append({
-                    'chunk': chunk,
-                    'start_ms': current_position,
-                    'end_ms': current_position + len(chunk)
-                })
-            current_position += len(chunk)
+                final_chunk_info.append(info)
 
         # 분할된 청크 WAV로 저장
         chunk_paths_with_time = []
-        for i, chunk_info in enumerate(final_chunks):
-            chunk_path = f"{os.path.splitext(audio_path)[0]}_chunk_sil_{i}.wav"
-            chunk_info['chunk'].export(chunk_path, format="wav")
+        for i, info in enumerate(final_chunk_info):
+            chunk_path = f"{os.path.splitext(audio_path)[0]}_chunk_{i}.wav"
+            info['chunk'].export(chunk_path, format="wav")
+
             chunk_paths_with_time.append({
                 'path': chunk_path,
-                'start_ms': chunk_info['start_ms'],
-                'end_ms': chunk_info['end_ms']
+                'start_ms': info['start_ms'],
+                'end_ms': info['end_ms'],
+                'duration_ms': info['duration_ms']
             })
 
-        log.info(f"총 {len(chunk_paths_with_time)}개의 청크로 분할 완료 (무음 기준 + 병합 + 슬라이스)")
+        log.info(chunk_paths_with_time)
+        log.info(f"총 {len(chunk_paths_with_time)}개의 청크로 분할 완료 (실제 타임스탬프 추적)")
         return chunk_paths_with_time
 
     except Exception as e:
         log.error(f"오디오 분할 실패: {str(e)}")
         raise
 
-def process_chunk(chunk_path, pipe):
+
+# 한 청크 Whisper STT 수행 (타임스탬프 정보 포함)
+def process_chunk_with_timestamp(chunk_info, pipe):
+    """
+    개별 청크 처리 함수 - 실제 타임스탬프 반환
+    """
     try:
+        chunk_path = chunk_info['path']
+        start_ms = chunk_info['start_ms']
+
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
             gc.collect()
-        
-        # Whisper 파라미터 최적화 (최소 필수 파라미터만 사용)
+
+        # 청크 처리 전에 오디오 정규화
+        audio = AudioSegment.from_wav(chunk_path)
+
+        # 오디오가 너무 조용하거나 단조로운지 확인
+        if audio.dBFS < -60:
+            log.info(f"청크 {chunk_path}가 너무 조용함, 건너뜀")
+            return None
+
+        temp_path = f"{chunk_path}_normalized.wav"
+        audio.export(temp_path, format="wav")
+
+        # Whisper 처리 시 타임스탬프 반환 옵션 활성화
+        # Whisper 파라미터 최적화 (반복 방지와 안정성 강화)
         result = pipe(
-            chunk_path,
-            chunk_length_s=30,           # 청크 길이 제한
-            stride_length_s=5,           # 오버랩 구간
-            batch_size=16,              # 배치 크기 증가
-            return_timestamps=True       # 타임스탬프 반환
+            temp_path,
+            stride_length_s=7,           # 오버랩 구간
+            batch_size=8,               # 배치 크기 감소로 안정성 확보
+            return_timestamps=True,      # 타임스탬프 반환
+            generate_kwargs={
+                "max_new_tokens": 256,   # 토큰 수 제한으로 환각 방지
+                "temperature": 0.0,      # 결정적 생성
+                "do_sample": False,      # 샘플링 비활성화
+                "repetition_penalty": 1.2,  # 반복 방지
+                "no_repeat_ngram_size": 3,  # 3-gram 반복 방지
+                "num_beams": 1,            # 빔 서치 비활성화로 빠른 처리
+                "language": "ko",        # korean으로 설정
+                "task": "transcribe",    # 텍스트로 그대로 변환
+            }
         )
-        
-        # 결과 후처리
+
         text = result.get('text', '').strip()
-        # 연속된 공백 제거
-        text = ' '.join(text.split())
-        return text
+
+        # 반복 문구 필터링 적용
+        '''
+        filtered_text = filter_repetitive_text(text)
+
+        # 추가 품질 검사
+        if len(filtered_text.split()) < 2:
+            log.info(f"청크 {chunk_path}에서 의미있는 텍스트 없음")
+            return None
+        '''
+
+        # 임시 파일 삭제
+        try:
+            os.remove(temp_path)
+        except:
+            pass
+
+        # 실제 오디오 파일에서의 절대 시간 계산
+        return {
+            'text': text,
+            'start_ms': start_ms,
+            'end_ms': chunk_info['end_ms'],
+            'chunk_timestamps': result.get('chunks', [])  # Whisper 내부 타임스탬프
+        }
+
     except Exception as e:
-        log.error(f"청크 처리 실패 ({chunk_path}): {str(e)}")
-        return ""
+        log.error(f"청크 처리 실패 ({chunk_info['path']}): {str(e)}")
+        return None
 
 def convert_seconds_to_hms(seconds):
     """Convert seconds to HH:MM:SS format"""
@@ -716,7 +831,6 @@ def convert_seconds_to_hms(seconds):
     return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
 # 전체 진행 함수
-# 첫 번째 코드 기반으로 개선된 전체 진행 함수
 def transcribe_long_audio(request: Request, file_path, model_name='openai/whisper-large-v3'):
     try:
         # GPU 리소스 정리
@@ -724,96 +838,88 @@ def transcribe_long_audio(request: Request, file_path, model_name='openai/whispe
             torch.cuda.empty_cache()
             gc.collect()
             torch.backends.cudnn.benchmark = True
-            torch.backends.cudnn.deterministic = False  # 성능 향상을 위해 비결정적 모드 사용
 
-        # 오디오 WAV로 변환 (개선된 전처리)
+        # 오디오 WAV로 변환
         wav_path = convert_to_wav(file_path)
 
-        # 디바이스 설정 (GPU or CPU)
-        device = 0 if torch.cuda.is_available() else -1
-        log.info(f"Whisper 실행 중 (Device: {'GPU' if device == 0 else 'CPU'})")
+        # 전체 오디오 길이 계산
+        full_audio = AudioSegment.from_wav(wav_path)
+        total_duration_ms = len(full_audio)
 
-        # Whisper 파이프라인 로딩 (최적화된 설정)
+        # 디바이스 설정 (GPU or CPU)
+        # GPU 변경 후 사용 가능한 GPU로 사용하는 자동화가 필요합니다.
+        device = 1 if torch.cuda.is_available() else -1
+        log.info(f"Whisper 실행 중 (Device: {'GPU' if device == 1 else 'CPU'})")
+
+        # Whisper 파이프라인 로딩
         log.info("Whisper 파이프라인 로딩 중...")
         whisper = whisper_pipeline(
             "automatic-speech-recognition",
             model=model_name,
-            device=device,
-            torch_dtype=torch.float16 if device == 0 else torch.float32,  # GPU에서 fp16 사용
-            model_kwargs={"use_cache": True}  # 캐시 사용으로 성능 향상
+            device=device
         )
 
-        # 오디오 청크로 분할 (최적화된 파라미터)
+        # 오디오 청크로 분할 (타임스탬프 정보 포함)
         log.info("오디오 파일을 청크로 분할 중...")
-        chunk_infos = split_audio(wav_path)
+        chunk_infos = split_audio_with_timestamps_vad(wav_path)
 
-        # 청크별 STT 처리 (병렬 처리 최적화)
+        # 청크별 STT 처리
         log.info("STT 처리 중...")
         results = []
         segments = []
-        batch_size = 4  # 배치 크기 증가
+        batch_size = 3
 
-        # GPU 메모리 사용량에 따라 동적으로 워커 수 조정
-        max_workers = min(4, os.cpu_count() or 1) if torch.cuda.is_available() else 2
-        
         for i in range(0, len(chunk_infos), batch_size):
             batch_chunk_infos = chunk_infos[i:i + batch_size]
             batch_results = []
 
-            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
                 future_to_chunk = {
-                    executor.submit(process_chunk, chunk_info['path'], whisper): (idx, chunk_info) 
-                    for idx, chunk_info in enumerate(batch_chunk_infos)
+                    executor.submit(process_chunk_with_timestamp, chunk_info, whisper): chunk_info
+                    for chunk_info in batch_chunk_infos
                 }
 
                 for future in tqdm(concurrent.futures.as_completed(future_to_chunk), total=len(batch_chunk_infos)):
-                    chunk_idx, chunk_info = future_to_chunk[future]
+                    chunk_info = future_to_chunk[future]
                     try:
                         result = future.result()
-                        if result.strip():  # 빈 결과가 아닌 경우만 추가
-                            batch_results.append((chunk_idx, result))
-                            
-                            start_time = chunk_info['start_ms'] / 1000.0
-                            end_time = chunk_info['end_ms'] / 1000.0
-                            
+
+                        if result is not None:
+                            batch_results.append(result)
+                            results.append(result['text'])
+
+                            # 실제 타임스탬프로 세그먼트 추가
                             segments.append({
-                                "start": convert_seconds_to_hms(start_time),
-                                "end": convert_seconds_to_hms(end_time),
-                                "text": result.strip()
+                                "start": convert_seconds_to_hms(result['start_ms'] / 1000.0),
+                                "end": convert_seconds_to_hms(result['end_ms'] / 1000.0),
+                                "text": result['text'].strip(),
+                                "start_seconds": result['start_ms'] / 1000.0,
+                                "end_seconds": result['end_ms'] / 1000.0
                             })
+
                     except Exception as e:
                         log.error(f"청크 처리 실패: {str(e)}")
-                        batch_results.append((chunk_idx, ""))
 
-            # 청크 순서대로 정렬하여 결과 저장
-            batch_results.sort(key=lambda x: x[0])
-            results.extend([r[1] for r in batch_results])
-
-            # GPU 메모리 정리
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
                 gc.collect()
 
-        # 전체 텍스트 통합 (필터링 제거)
-        plain_text = " ".join(results)
+        # 세그먼트를 시간순으로 정렬
+        segments.sort(key=lambda x: x['start_seconds'])
 
-        # 세그먼트를 시작 시간 기준으로 정렬
-        segments.sort(key=lambda x: (
-            int(x['start'].split(':')[0]),  # hours
-            int(x['start'].split(':')[1]),  # minutes
-            int(x['start'].split(':')[2])   # seconds
-        ))
-
+        # 전체 텍스트 통합 및 최종 정리
+        plain_text = " ".join([seg['text'] for seg in segments])
+        
         # docx 문서 생성
         doc = Document()
         doc.add_heading('회의록', 0)
-        
+
         # 스타일 설정
         style = doc.styles['Normal']
         style.font.name = '맑은 고딕'
         style.font.size = Pt(11)
 
-        # 세그먼트 정보를 포함한 스크립트 생성
+        # 시간순으로 정렬된 세그먼트로 스크립트 생성
         for segment in segments:
             p = doc.add_paragraph()
             p.add_run(f"[{segment['start']} - {segment['end']}] ").bold = True
@@ -883,6 +989,7 @@ def transcription_handler(request, file_path, metadata):
 
         log.debug(data)
         return data
+
 
 def transcribe(request: Request, file_path: str, metadata: Optional[dict] = None, filedata: list = None):
     log.info(f"transcribe: {file_path} {metadata}")

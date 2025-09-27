@@ -105,7 +105,7 @@ for source in log_sources:
 
 log.setLevel(SRC_LOG_LEVELS["CONFIG"])
 
-WEBUI_NAME = os.environ.get("WEBUI_NAME", "전북특별자치도청 AI 챗봇")
+WEBUI_NAME = os.environ.get("WEBUI_NAME", "전북특별자치도 생성형 AI 시스템")
 
 WEBUI_FAVICON_URL = "https://openwebui.com/favicon.png"
 

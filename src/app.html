@@ -1,255 +1,623 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-	<head>
-		<meta charset="utf-8" />
-		<link rel="icon" type="image/png" href="/static/favicon.png" />
-		<link rel="icon" type="image/png" href="/static/favicon-96x96.png" sizes="96x96" />
-		<link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
-		<link rel="shortcut icon" href="/static/favicon.ico" />
-		<link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
-		<meta name="apple-mobile-web-app-title" content="전북특별자치도청AI" />
+<head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/png" href="/static/favicon.png" />
+    <link rel="icon" type="image/png" href="/static/favicon-96x96.png" sizes="96x96" />
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+    <link rel="shortcut icon" href="/static/favicon.ico" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-title" content="Jeonbuk AI" />
+    <link rel="manifest" href="/manifest.json" crossorigin="use-credentials" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0a0a1a" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="description" content="Jeonbuk Special Self-Governing Province AI Agent" />
+    <link rel="search" type="application/opensearchdescription+xml" title="Jeonbuk AI" href="/opensearch.xml" />
+    <script src="/static/loader.js" defer></script>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;800;900&family=Noto+Sans+KR:wght@400;700;900&display=swap" rel="stylesheet">
+    
+    <script>
+        function resizeIframe(obj) {
+            obj.style.height = obj.contentWindow.document.documentElement.scrollHeight + 'px';
+        }
+    </script>
+    
+    <script>
+        // Theme preset and splash image swap (FOUC prevention)
+        (() => {
+            const metaThemeColorTag = document.querySelector('meta[name="theme-color"]');
+            const prefersDarkTheme = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            
+            if (!localStorage?.theme) localStorage.theme = 'system';
+            
+            if (localStorage.theme === 'system') {
+                document.documentElement.classList.add(prefersDarkTheme ? 'dark' : 'light');
+                metaThemeColorTag.setAttribute('content', prefersDarkTheme ? '#0a0a1a' : '#ffffff');
+            } else if (localStorage.theme === 'oled-dark') {
+                document.documentElement.style.setProperty('--color-gray-800', '#101010');
+                document.documentElement.style.setProperty('--color-gray-850', '#050505');
+                document.documentElement.style.setProperty('--color-gray-900', '#000000');
+                document.documentElement.style.setProperty('--color-gray-950', '#000000');
+                document.documentElement.classList.add('dark');
+                metaThemeColorTag.setAttribute('content', '#000000');
+            } else if (localStorage.theme === 'light') {
+                document.documentElement.classList.add('light');
+                metaThemeColorTag.setAttribute('content', '#ffffff');
+            } else if (localStorage.theme === 'hero') {
+                document.documentElement.classList.add('dark', 'hero');
+                metaThemeColorTag.setAttribute('content', '#0a0a1a');
+            } else {
+                document.documentElement.classList.add('dark');
+                metaThemeColorTag.setAttribute('content', '#0a0a1a');
+            }
+            
+            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+                if (localStorage.theme === 'system') {
+                    if (e.matches) {
+                        document.documentElement.classList.add('dark');
+                        document.documentElement.classList.remove('light');
+                        metaThemeColorTag.setAttribute('content', '#0a0a1a');
+                    } else {
+                        document.documentElement.classList.add('light');
+                        document.documentElement.classList.remove('dark');
+                        metaThemeColorTag.setAttribute('content', '#ffffff');
+                    }
+                }
+            });
+            
+            function setSplashImage() {
+                const logo = document.getElementById('logo');
+                const isDarkMode = document.documentElement.classList.contains('dark');
+                if (isDarkMode && logo) {
+                    const darkImage = new Image();
+                    darkImage.src = '/static/splash-dark.png';
+                    darkImage.onload = () => {
+                        logo.src = '/static/splash-dark.png';
+                        logo.style.filter = '';
+                    };
+                    darkImage.onerror = () => {
+                        logo.style.filter = 'invert(1)';
+                    };
+                }
+            }
+            window.onload = setSplashImage;
+        })();
+    </script>
+    
+    <title>Jeonbuk AI</title>
+    
+    %sveltekit.head%
+    
+    <style>
+        /* --- Blue Cyber Splash Styles (격자 효과 제거 + 로그 박스 배경 더 파란색) --- */
+        :root {
+            --bg0: #0a0a1a; /* 더 진한 파란색 계열 배경 */
+            --neon1: #0066ff; /* 네온 블루 */
+            --neon2: #0066cc; /* 중간 블루 */
+            --neon3: #00aaff; /* 사이언 */
+            --fg: #e6f0ff; /* 아이시 블루 화이트 */
+        }
 
-		<link rel="manifest" href="/manifest.json" crossOrigin="use-credentials" />
-		<meta
-			name="viewport"
-			content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"
-		/>
-		<meta name="theme-color" content="#171717" />
-		<meta name="robots" content="noindex,nofollow" />
-		<meta name="description" content="전북특별자치도청AI" />
-		<link
-			rel="search"
-			type="application/opensearchdescription+xml"
-			title="전북특별자치도청AI"
-			href="/opensearch.xml"
-		/>
-		<script src="/static/loader.js" defer></script>
+        #cyber-splash {
+            position: fixed;
+            inset: 0;
+            background: 
+                radial-gradient(1200px 600px at 10% 10%, #0f101f 0%, transparent 60%),
+                radial-gradient(1000px 500px at 90% 20%, #0d0e1a 0%, transparent 60%),
+                linear-gradient(180deg, var(--bg0) 0%, #070715 100%);
+            display: grid;
+            grid-template-rows: 1fr auto auto 1fr;
+            z-index: 999999;
+            overflow: hidden;
+            opacity: 1;
+            transition: opacity 0.6s ease, filter 0.6s ease;
+            will-change: opacity, filter;
+        }
 
-		<script>
-			function resizeIframe(obj) {
-				obj.style.height = obj.contentWindow.document.documentElement.scrollHeight + 'px';
-			}
-		</script>
+        #cyber-splash.hide {
+            opacity: 0;
+            pointer-events: none;
+            filter: blur(1px);
+        }
 
-		<script>
-			// On page load or when changing themes, best to add inline in `head` to avoid FOUC
-			(() => {
-				const metaThemeColorTag = document.querySelector('meta[name="theme-color"]');
-				const prefersDarkTheme = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        /* scanlines + noise */
+        .scan {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 3;
+            background: repeating-linear-gradient(to bottom, 
+                rgba(255,255,255,0.05) 0px, 
+                rgba(255,255,255,0.05) 1px, 
+                transparent 2px, 
+                transparent 4px);
+            mix-blend-mode: overlay;
+            opacity: 0.28;
+            animation: flicker 3.2s linear infinite;
+        }
 
-				if (!localStorage?.theme) {
-					localStorage.theme = 'system';
-				}
+        @keyframes flicker {
+            0%,19%,21%,23%,80%,100% { opacity: 0.28; }
+            20%,22% { opacity: 0.16; }
+        }
 
-				if (localStorage.theme === 'system') {
-					document.documentElement.classList.add(prefersDarkTheme ? 'dark' : 'light');
-					metaThemeColorTag.setAttribute('content', prefersDarkTheme ? '#171717' : '#ffffff');
-				} else if (localStorage.theme === 'oled-dark') {
-					document.documentElement.style.setProperty('--color-gray-800', '#101010');
-					document.documentElement.style.setProperty('--color-gray-850', '#050505');
-					document.documentElement.style.setProperty('--color-gray-900', '#000000');
-					document.documentElement.style.setProperty('--color-gray-950', '#000000');
-					document.documentElement.classList.add('dark');
-					metaThemeColorTag.setAttribute('content', '#000000');
-				} else if (localStorage.theme === 'light') {
-					document.documentElement.classList.add('light');
-					metaThemeColorTag.setAttribute('content', '#ffffff');
-				} else if (localStorage.theme === 'her') {
-					document.documentElement.classList.add('dark');
-					document.documentElement.classList.add('her');
-					metaThemeColorTag.setAttribute('content', '#983724');
-				} else {
-					document.documentElement.classList.add('dark');
-					metaThemeColorTag.setAttribute('content', '#171717');
-				}
+        /* center stack */
+        .center {
+            grid-row: 2 / span 2;
+            place-self: center;
+            display: grid;
+            gap: 18px;
+            width: min(820px, 92vw);
+            z-index: 5;
+        }
 
-				window.matchMedia('(prefers-color-scheme: dark)').addListener((e) => {
-					if (localStorage.theme === 'system') {
-						if (e.matches) {
-							document.documentElement.classList.add('dark');
-							document.documentElement.classList.remove('light');
-							metaThemeColorTag.setAttribute('content', '#171717');
-						} else {
-							document.documentElement.classList.add('light');
-							document.documentElement.classList.remove('dark');
-							metaThemeColorTag.setAttribute('content', '#ffffff');
-						}
-					}
-				});
+        /* title */
+        .title {
+            font-family: "Orbitron", "Noto Sans KR", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+            font-weight: 900;
+            font-size: clamp(28px, 7vw, 58px);
+            letter-spacing: 0.04em;
+            color: var(--fg);
+            position: relative;
+            text-shadow: 0 0 12px rgba(0, 102, 255, 0.45), 0 0 22px rgba(0, 170, 255, 0.28);
+            filter: drop-shadow(0 0 12px rgba(0, 102, 255, 0.22));
+            text-align: center;
+        }
 
-				function setSplashImage() {
-					const logo = document.getElementById('logo');
-					const isDarkMode = document.documentElement.classList.contains('dark');
+        /* progress bar */
+        .bar {
+            height: 10px;
+            border-radius: 999px;
+            background: #0f101f;
+            outline: 1px solid rgba(255,255,255,0.08);
+            position: relative;
+            overflow: hidden;
+        }
 
-					if (isDarkMode) {
-						const darkImage = new Image();
-						darkImage.src = '/static/splash-dark.png';
+        .bar > i {
+            position: absolute;
+            inset: 0;
+            width: 0%;
+            background: linear-gradient(90deg, var(--neon1), var(--neon2), var(--neon3));
+            filter: drop-shadow(0 0 12px rgba(0, 102, 255, 0.36));
+            transition: width 0.2s ease;
+        }
 
-						darkImage.onload = () => {
-							logo.src = '/static/splash-dark.png';
-							logo.style.filter = ''; // Ensure no inversion is applied if splash-dark.png exists
-						};
+        .bar::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: repeating-linear-gradient(90deg, 
+                rgba(170, 200, 255, 0.10) 0 2px, 
+                transparent 2px 6px);
+            mix-blend-mode: overlay;
+            animation: stripe 1.2s linear infinite;
+        }
 
-						darkImage.onerror = () => {
-							logo.style.filter = 'invert(1)'; // Invert image if splash-dark.png is missing
-						};
-					}
-				}
+        @keyframes stripe {
+            from { background-position: 0 0; }
+            to { background-position: 40px 0; }
+        }
 
-				// Runs after classes are assigned
-				window.onload = setSplashImage;
-			})();
-		</script>
+        /* logs - 박스 배경을 더 파란색으로 조정 */
+        .panel {
+            display: grid;
+            gap: 12px;
+            padding: 14px 16px;
+            border: 1px solid rgba(255,255,255,0.08);
+            background: rgba(10, 15, 30, 0.65); /* 더 진하고 파란색 계열로 조정 */
+            backdrop-filter: blur(6px);
+            border-radius: 14px;
+            max-height: 28vh;
+            overflow: auto;
+            font: 12px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            color: #cce5ff;
+        }
 
-		<title>전북특별자치도청AI</title>
+        .muted {
+            color: #88aadd;
+            opacity: 0.9;
+        }
 
-		%sveltekit.head%
-	</head>
+        .row {
+            display: flex;
+            gap: 8px;
+            align-items: baseline;
+            white-space: pre-wrap;
+        }
 
-	<body data-sveltekit-preload-data="hover">
-		<div style="display: contents">%sveltekit.body%</div>
+        /* 캔버스들 */
+        #ocean {
+            position: absolute;
+            inset: 0;
+            z-index: 0;
+            opacity: 0.9;
+            filter: contrast(110%) saturate(120%) blur(0.12px);
+        }
 
-		<div
-			id="splash-screen"
-			style="position: fixed; z-index: 100; top: 0; left: 0; width: 100%; height: 100%"
-		>
-			<style type="text/css" nonce="">
-				html {
-					overflow-y: scroll !important;
-				}
-			</style>
+        #matrix {
+            position: absolute;
+            inset: 0;
+            z-index: 2;
+            pointer-events: none;
+            opacity: 0.95;
+        }
 
-			<img
-				id="logo"
-				style="
-					position: absolute;
-					width: auto;
-					height: 6rem;
-					top: 44%;
-					left: 50%;
-					transform: translateX(-50%);
-				"
-				src="/static/splash.png"
-			/>
+        .chrome {
+            position: absolute;
+            inset: 0;
+            z-index: 2;
+            background: 
+                radial-gradient(800px 200px at 50% -10%, rgba(0, 102, 255, 0.18), transparent 60%),
+                radial-gradient(1200px 200px at 50% 110%, rgba(0, 170, 255, 0.18), transparent 60%);
+            pointer-events: none;
+        }
+    </style>
+</head>
 
-			<div
-				style="
-					position: absolute;
-					top: 33%;
-					left: 50%;
+<body data-sveltekit-preload-data="hover">
+    <!-- Cyberpunk Splash (Blue with Green Matrix, No Grid) -->
+    <div id="cyber-splash" aria-hidden="true">
+        <!-- 캔버스 -->
+        <canvas id="ocean"></canvas>
+        <canvas id="matrix"></canvas>
+        <!-- 그리드 효과 제거됨 -->
+        <div class="scan"></div>
+        <div class="chrome"></div>
+        
+        <div class="center">
+            <div class="title" data-text="Jeonbuk Generative AI">Jeonbuk Generative AI</div>
+            <div class="bar"><i id="prog"></i></div>
+            <div class="panel" id="logpanel" role="status" aria-live="polite">
+                <div class="row muted">[SYS] Booting UI shell…</div>
+                <div class="row muted">[NET] Probing backend endpoints …</div>
+            </div>
+        </div>
+    </div>
+    
+    <div style="display: contents">%sveltekit.body%</div>
+    
+    <script>
+        (function () {
+            const splash = document.getElementById('cyber-splash');
+            const prog = document.getElementById('prog');
+            const panel = document.getElementById('logpanel');
+            const MIN_SPLASH_MS = 2000; // 2초
+            const splashStart = performance.now();
 
-					width: 24rem;
-					transform: translateX(-50%);
+            /* ---------- Log helper ---------- */
+            const log = (msg, cls = '') => {
+                const row = document.createElement('div');
+                row.className = 'row ' + (cls || '');
+                row.textContent = msg;
+                panel.appendChild(row);
+                panel.scrollTop = panel.scrollHeight;
+            };
 
-					display: flex;
-					flex-direction: column;
-					align-items: center;
-				"
-			>
-				<img
-					id="logo-her"
-					style="width: auto; height: 13rem"
-					src="/static/splash.png"
-					class="animate-pulse-fast"
-				/>
+            /* ---------- Fake loading logs (최소 10줄 이상) ---------- */
+            const LOG_STEPS = [
+                '[INIT] Runtime context preparing…',
+                '[CONF] User theme/env applying…',
+                '[FS] Local cache indexing…',
+                '[SEC] Token storage integrity check…',
+                '[ML] Model catalog loading…',
+                '[RAG] Knowledge base mount/verify…',
+                '[NET] Proxy/gateway route handshake…',
+                '[I18N] Translation resources loading…',
+                '[ASSET] Static resource fingerprint check…',
+                '[DB] Session/config schema migration…',
+                '[WS] Real-time channel handshake…',
+                '[CACHE] Prefetch queue warmup…',
+                '[QA] Healthcheck vector sampling…',
+                '[OK] Core service endpoints ready.'
+            ];
+            let logIndex = 0;
 
-				<div style="position: relative; width: 24rem; margin-top: 0.5rem">
-					<div
-						id="progress-background"
-						style="
-							position: absolute;
-							width: 100%;
-							height: 0.75rem;
+            function scheduleLogs(elapsedRatio) {
+                const minTarget = 10; // 최소 10줄
+                const targetCount = Math.max(minTarget, Math.floor(elapsedRatio * LOG_STEPS.length));
+                while (logIndex < LOG_STEPS.length && logIndex < targetCount) {
+                    const msg = LOG_STEPS[logIndex++];
+                    log(msg, logIndex % 3 === 0 ? '' : 'muted');
+                }
+            }
 
-							border-radius: 9999px;
-							background-color: #fafafa9a;
-						"
-					></div>
+            /* ---------- Fake progress while probing (>= 2s) ---------- */
+            let p = 0;
+            let progTimer = setInterval(() => {
+                const elapsed = performance.now() - splashStart;
+                const target = Math.min(95, (elapsed / MIN_SPLASH_MS) * 95);
+                p = p + (target - p) * 0.25;
+                prog.style.width = p + '%';
+                scheduleLogs(p / 100);
+            }, 100);
 
-					<div
-						id="progress-bar"
-						style="
-							position: absolute;
-							width: 0%;
-							height: 0.75rem;
-							border-radius: 9999px;
-							background-color: #fff;
-						"
-						class="bg-white"
-					></div>
-				</div>
-			</div>
+            /* ---------- Robust backend probing ---------- */
+            const CANDIDATES = ["/health","/api/health","/api/healthz","/api/v1/health","/api/v1/system/health","/api/version","/"];
+            const isHealthyResponse = (res) => [200,204,401,403,404].includes(res.status);
 
-			<!-- <span style="position: absolute; bottom: 32px; left: 50%; margin: -36px 0 0 -36px">
-				Footer content
-			</span> -->
-		</div>
-	</body>
+            async function probe(url, perReqTimeout = 1500) {
+                const ctrl = new AbortController();
+                const t = setTimeout(() => ctrl.abort(), perReqTimeout);
+                try {
+                    let r = await fetch(url, { method:"HEAD", cache:"no-store", signal:ctrl.signal });
+                    if (!isHealthyResponse(r)) r = await fetch(url, { method:"GET", cache:"no-store", signal:ctrl.signal });
+                    clearTimeout(t);
+                    if (isHealthyResponse(r)) return true;
+                    const ct = r.headers.get("content-type") || "";
+                    if (ct.includes("application/json")) {
+                        const j = await r.clone().json().catch(() => ({}));
+                        if (j?.ok === true || j?.status === "ok" || j?.version) return true;
+                    }
+                    return false;
+                } catch {
+                    clearTimeout(t);
+                    return false;
+                }
+            }
+
+            async function waitForBackend({ totalTimeout = 12000, tick = 500 } = {}) {
+                const t0 = Date.now();
+                let i = 0;
+                while (Date.now() - t0 < totalTimeout) {
+                    const url = CANDIDATES[i % CANDIDATES.length];
+                    const ok = await probe(url);
+                    log(`[NET] Probe ${url} → ${ok ? 'OK' : '…'}`, ok ? '' : 'muted');
+                    if (ok) return true;
+                    p = Math.min(98, p + 1.5);
+                    prog.style.width = p + "%";
+                    await new Promise(r => setTimeout(r, tick));
+                    i++;
+                }
+                return false;
+            }
+
+            /* ---------- Dismiss splash (페이드아웃) ---------- */
+            function dismiss(ok = true) {
+                const elapsed = performance.now() - splashStart;
+                const waitMore = Math.max(0, MIN_SPLASH_MS - elapsed); // 남은 시간
+                const doHide = () => {
+                    clearInterval(progTimer);
+                    prog.style.width = "100%";
+                    while (logIndex < 12 && logIndex < LOG_STEPS.length) {
+                        log(LOG_STEPS[logIndex++], 'muted');
+                    }
+                    log(ok ? "[OK] Backend is ready. Launching UI…" : "[WARN] Backend not detected. Continuing…", ok ? "" : "muted");
+                    setTimeout(() => {
+                        splash.classList.add("hide");
+                        setTimeout(() => {
+                            // cleanup canvas to save CPU
+                            try {
+                                cancelAnimationFrame(raf);
+                            } catch {}
+                            try {
+                                cancelAnimationFrame(matrixRaf);
+                            } catch {}
+                            splash.remove();
+                        }, 650);
+                    }, 250);
+                };
+                if (waitMore > 0) {
+                    const t0 = performance.now();
+                    const anim = () => {
+                        const t = performance.now() - t0;
+                        const goal = Math.min(100, p + (t / waitMore) * (100 - p));
+                        prog.style.width = goal + '%';
+                        scheduleLogs(goal/100);
+                        if (t < waitMore) {
+                            requestAnimationFrame(anim);
+                        } else {
+                            doHide();
+                        }
+                    };
+                    requestAnimationFrame(anim);
+                } else {
+                    doHide();
+                }
+            }
+
+            /* ---------- OCEAN: 플로우필드 + 메타볼 (블루 팔레트) ---------- */
+            const canvas = document.getElementById('ocean');
+            const ctx = canvas.getContext('2d', { alpha: true });
+            let W=0, H=0, dpr=window.devicePixelRatio||1, raf;
+
+            function fitOcean() {
+                dpr = window.devicePixelRatio || 1;
+                W = canvas.width = Math.floor(window.innerWidth * dpr);
+                H = canvas.height = Math.floor(window.innerHeight * dpr);
+                canvas.style.width = window.innerWidth + 'px';
+                canvas.style.height = window.innerHeight + 'px';
+                ctx.setTransform(1,0,0,1,0,0);
+            }
+            window.addEventListener('resize', () => {
+                cancelAnimationFrame(raf);
+                fitOcean();
+                initParticles();
+                animateOcean();
+                fitMatrix();
+                initMatrix();
+            }, { passive:true });
+            fitOcean();
+
+            /* 파티클: 블루 계열 */
+            const MAX_PARTICLES = 2000;
+            const R_BASE = 1.1;
+            const SPEED = 0.34;
+            const FADE = 0.06;
+            const COLOR_A = [0, 102, 255]; // 네온 블루
+            const COLOR_B = [0, 102, 204]; // 중간 블루
+            const COLOR_C = [0, 170, 255]; // 사이언
+            let particles = [];
+
+            function rand(a,b){ return a + Math.random()*(b-a); }
+
+            function initParticles() {
+                particles = [];
+                const n = Math.floor(Math.min(MAX_PARTICLES, (W*H)/(900*dpr)));
+                for (let i=0;i<n;i++){
+                    particles.push({ 
+                        x: Math.random()*W, 
+                        y: Math.random()*H, 
+                        r: (R_BASE + Math.random()*0.9) * dpr,
+                        life: rand(0,1), 
+                        huePick: Math.random() 
+                    });
+                }
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.fillStyle = 'rgba(7,7,16,0.90)';
+                ctx.fillRect(0,0,W,H);
+            }
+
+            function fieldAngle(x,y,t) {
+                const s1 = Math.sin(0.0012*x + 0.0010*y + t*0.35);
+                const s2 = Math.cos(0.0007*x - 0.0013*y - t*0.22);
+                const s3 = Math.sin(0.0009*(x+y) + t*0.18);
+                const v = s1 + 0.8*s2 + 0.6*s3;
+                return v * Math.PI;
+            }
+
+            function lerp(a,b,t){ return a + (b-a)*t; }
+
+            function pickColor(p) {
+                const t = (p.life + p.huePick*0.5) % 1;
+                let c1, c2, k;
+                if (t < 0.33) {
+                    c1 = COLOR_A; c2 = COLOR_B; k = t/0.33;
+                } else if (t < 0.66) {
+                    c1 = COLOR_B; c2 = COLOR_C; k = (t-0.33)/0.33;
+                } else {
+                    c1 = COLOR_C; c2 = COLOR_A; k = (t-0.66)/0.34;
+                }
+                const r = Math.round(lerp(c1[0], c2[0], k));
+                const g = Math.round(lerp(c1[1], c2[1], k));
+                const b = Math.round(lerp(c1[2], c2[2], k));
+                return `rgba(${r},${g},${b},0.08)`;
+            }
+
+            function drawParticle(p) {
+                const grd = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r*2.6);
+                grd.addColorStop(0.0, 'rgba(255,255,255,0.06)');
+                grd.addColorStop(0.3, pickColor(p));
+                grd.addColorStop(1.0, 'rgba(0,0,0,0)');
+                ctx.fillStyle = grd;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.r*2.6, 0, Math.PI*2);
+                ctx.fill();
+            }
+
+            let t0 = performance.now() / 1000;
+            function animateOcean(nowTs) {
+                const t = (nowTs ? nowTs/1000 : performance.now()/1000);
+                const dt = Math.min(0.033, Math.max(0.016, t - t0));
+                t0 = t;
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.fillStyle = `rgba(7,7,16,${FADE})`;
+                ctx.fillRect(0,0,W,H);
+                ctx.globalCompositeOperation = 'lighter';
+                const vscale = SPEED * dpr * Math.max(0.8, Math.min(1.6, (W*H)/(1200*800)));
+                for (let i=0;i<particles.length;i++){
+                    const p = particles[i];
+                    const a = fieldAngle(p.x, p.y, t*0.6);
+                    p.x += Math.cos(a) * vscale * (0.6 + p.r*0.08) * (dt/0.016);
+                    p.y += Math.sin(a) * vscale * (0.6 + p.r*0.08) * (dt/0.016);
+                    if (p.x < -20) p.x = W + 20;
+                    if (p.x > W + 20) p.x = -20;
+                    if (p.y < -20) p.y = H + 20;
+                    if (p.y > H + 20) p.y = -20;
+                    p.life = (p.life + dt*0.06) % 1;
+                    drawParticle(p);
+                }
+                raf = requestAnimationFrame(animateOcean);
+            }
+            initParticles();
+            animateOcean();
+
+            /* ---------- MATRIX: 녹색 코드 빗물 (원래 녹색 계열 유지) ---------- */
+            const matrix = document.getElementById('matrix');
+            const mctx = matrix.getContext('2d');
+            let MW=0, MH=0, matrixRaf, colCount, colWidth, drops, fontSize;
+
+            function fitMatrix() {
+                const r = window.devicePixelRatio || 1;
+                MW = matrix.width = Math.floor(window.innerWidth * r);
+                MH = matrix.height = Math.floor(window.innerHeight * r);
+                matrix.style.width = window.innerWidth + 'px';
+                matrix.style.height = window.innerHeight + 'px';
+                fontSize = Math.max(12, Math.floor(14 * r));
+                colWidth = fontSize * 0.85;
+                colCount = Math.floor(MW / colWidth);
+                mctx.setTransform(1,0,0,1,0,0);
+                mctx.font = `${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+            }
+            fitMatrix();
+
+            const CHARS = Array.from("ㄱㄴㄷㄹㅂㅅㅇㅈㅊㅋㅌㅎㅏㅑㅓㅕㅗㅛㅜㅠㅡㅣABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789[]{}<>/&$#*@=+?-");
+
+            function initMatrix() {
+                drops = new Array(colCount).fill(0).map(() => ({ 
+                    y: Math.random() * (-MH * 0.5),
+                    speed: 2 + Math.random() * 3
+                }));
+            }
+
+            function animateMatrix() {
+                mctx.fillStyle = "rgba(5,10,6,0.20)";
+                mctx.fillRect(0,0,MW,MH);
+                for (let i=0; i<colCount; i++) {
+                    const x = i * colWidth;
+                    const d = drops[i];
+                    const char = CHARS[(Math.random()*CHARS.length)|0];
+                    
+                    // 녹색 계열 유지
+                    mctx.fillStyle = "rgba(200,255,220,0.95)";
+                    mctx.fillText(char, x, d.y);
+                    mctx.fillStyle = "rgba(0,255,110,0.78)";
+                    mctx.fillText(char, x, d.y - fontSize*1.1);
+                    
+                    d.y += fontSize * d.speed;
+                    if (d.y > MH + fontSize*2) {
+                        d.y = -Math.random() * MH * 0.5;
+                        d.speed = 2 + Math.random() * 3;
+                    }
+                }
+                matrixRaf = requestAnimationFrame(animateMatrix);
+            }
+            initMatrix();
+            animateMatrix();
+
+            /* ---------- 부팅 시퀀스 ---------- */
+            (async () => {
+                log("[SYS] Initializing renderer…");
+                const ok = await waitForBackend().catch(() => false);
+                const hydrated = document.querySelector('[data-sveltekit-preload-data]');
+                if (hydrated && hydrated.childElementCount > 0) {
+                    dismiss(true);
+                    return;
+                }
+                dismiss(ok);
+            })();
+
+            // 리사이즈 처리
+            window.addEventListener('resize', () => {
+                cancelAnimationFrame(matrixRaf);
+                fitOcean();
+                initParticles();
+                animateOcean();
+                fitMatrix();
+                initMatrix();
+                animateMatrix();
+            }, { passive:true });
+
+            // 최후 안전망
+            setTimeout(() => {
+                if (document.getElementById("cyber-splash")) dismiss(false);
+            }, 10000);
+        })();
+    </script>
+</body>
 </html>
-
-<style type="text/css" nonce="">
-	html {
-		overflow-y: hidden !important;
-	}
-
-	#splash-screen {
-		background: #fff;
-	}
-
-	html.dark #splash-screen {
-		background: #000;
-	}
-
-	html.her #splash-screen {
-		background: #983724;
-	}
-
-	#logo-her {
-		display: none;
-	}
-
-	#progress-background {
-		display: none;
-	}
-
-	#progress-bar {
-		display: none;
-	}
-
-	html.her #logo {
-		display: none;
-	}
-
-	html.her #logo-her {
-		display: block;
-		filter: invert(1);
-	}
-
-	html.her #progress-background {
-		display: block;
-	}
-
-	html.her #progress-bar {
-		display: block;
-	}
-
-	@media (max-width: 24rem) {
-		html.her #progress-background {
-			display: none;
-		}
-
-		html.her #progress-bar {
-			display: none;
-		}
-	}
-
-	@keyframes pulse {
-		50% {
-			opacity: 0.65;
-		}
-	}
-
-	.animate-pulse-fast {
-		animation: pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-	}
-</style>

@@ -5,103 +5,74 @@
     import { getContext } from 'svelte';
     const i18n = getContext('i18n');
 
-    type User = {
-        user_id: string;
-	email: string;
-        user_name: string;
-        monthly_tokens?: number;
-        monthly_requests?: number;
-        last_activity?: string;
-    };
-
-    let users: User[] = [];
-    let selectedUser: User | null = null;
-    let userLimits: any = null;
+    let users = [];
+    let selectedUser = null;
+    let userLimits = null;
     let loading = false;
     let editing = false;
     let showModal = false;
     let modalPosition = { x: 0, y: 0 };
-
-    // 정렬 상태
-    let sortKey: 'monthly_tokens' | 'monthly_requests' | 'user_name' | 'email' | 'last_activity' | 'user_id' = 'monthly_tokens';
+    let editButtonRef: HTMLElement;
+    let sortKey: 'monthly_tokens' | 'monthly_requests' | 'user_name' | 'last_activity' = 'monthly_tokens';
     let sortOrder: 'asc' | 'desc' = 'desc';
 
-    // 페이지네이션 상태
-    let page = 1;
-    let pageSize = 200;
-    const pageCount = () => Math.max(1, Math.ceil(users.length / pageSize));
-    const pageSlice = () => users.slice((page - 1) * pageSize, page * pageSize);
+	function applySort() {
+	    users = users
+	        .slice()
+	        .sort((a, b) => {
+	            const A = a[sortKey] ?? 0;
+	            const B = b[sortKey] ?? 0;
+	            if (A === B) return 0;
+	            return sortOrder === 'asc' ? (A > B ? 1 : -1) : (A < B ? 1 : -1);
+	        });
+	}
 
-    function toNumberOrZero(v: any) {
-        const n = typeof v === 'number' ? v : Number(v);
-        return Number.isFinite(n) ? n : 0;
-    }
+	function setSort(key) {
+	    if (sortKey === key) {
+	        sortOrder = sortOrder === 'asc' ? 'desc' : 'asc';
+	    } else {
+	        sortKey = key;
+	        sortOrder = 'desc';
+	    }
+	    applySort();
+	}
 
-    function compare(a: User, b: User) {
-        if (sortKey === 'monthly_tokens' || sortKey === 'monthly_requests') {
-            const A = toNumberOrZero(a[sortKey]);
-            const B = toNumberOrZero(b[sortKey]);
-            if (A === B) return 0;
-            return sortOrder === 'asc' ? (A > B ? 1 : -1) : (A < B ? 1 : -1);
-        }
-        if (sortKey === 'last_activity') {
-            const A = a.last_activity ? new Date(a.last_activity).getTime() : 0;
-            const B = b.last_activity ? new Date(b.last_activity).getTime() : 0;
-            if (A === B) return 0;
-            return sortOrder === 'asc' ? (A > B ? 1 : -1) : (A < B ? 1 : -1);
-        }
-        // 문자열(user_name, user_id)
-        const A = (a[sortKey] ?? '') as string;
-        const B = (b[sortKey] ?? '') as string;
-        if (A === B) return 0;
-        return sortOrder === 'asc' ? (A > B ? 1 : -1) : (A < B ? 1 : -1);
-    }
-
-    function applySort() {
-        users = users.slice().sort(compare);
-        page = 1;
-    }
-
-    function setSort(key: typeof sortKey) {
-        if (sortKey === key) {
-            sortOrder = sortOrder === 'asc' ? 'desc' : 'asc';
-        } else {
-            sortKey = key;
-            // 기본 방향: 숫자 desc, 문자열/날짜 asc
-            sortOrder = (key === 'monthly_tokens' || key === 'monthly_requests') ? 'desc' : 'asc';
-        }
-        applySort();
-    }
 
     async function loadUsers() {
         loading = true;
         try {
             const res = await getUsersWithUsage(localStorage.token);
-            users = (res?.data?.users ?? []) as User[];
-            sortKey = 'monthly_tokens';
-            sortOrder = 'desc';
-            applySort();
+            users = res.data.users
+	            .slice() // 원본 보존(선택)
+	            .sort((a, b) => (b.monthly_tokens ?? 0) - (a.monthly_tokens ?? 0));
+	    applySort();
         } catch (e) {
             toast.error($i18n.t('Failed to load user list'));
         }
         loading = false;
     }
 
-    async function selectUser(user: User, event: MouseEvent) {
+    async function selectUser(user, event: MouseEvent) {
         selectedUser = user;
         editing = false;
         try {
             const res = await getUserLimits(localStorage.token, user.user_id);
-            if (!res.success) throw new Error(res.detail || 'Failed to load user limits');
+            if (!res.success) {
+                throw new Error(res.detail || 'Failed to load user limits');
+            }
             userLimits = res.data;
-
+            
+            // Position modal to the left of the button
             const button = event.target as HTMLElement;
             const rect = button.getBoundingClientRect();
-            modalPosition = { x: rect.left - 330, y: rect.top };
+            modalPosition = {
+                x: rect.left - 330, // Modal width (320px) + 10px gap
+                y: rect.top
+            };
             showModal = true;
-        } catch (e: any) {
+        } catch (e) {
             console.error('Error loading user limits:', e);
-            toast.error(e?.message ?? $i18n.t('Failed to load user limits'));
+            toast.error(e instanceof Error ? e.message : $i18n.t('Failed to load user limits'));
             showModal = false;
             selectedUser = null;
             userLimits = null;
@@ -116,11 +87,10 @@
 
     async function saveLimits() {
         try {
-            if (!selectedUser) return;
             await updateUserLimits(localStorage.token, selectedUser.user_id, userLimits);
             toast.success($i18n.t('Limits saved successfully'));
             editing = false;
-        } catch {
+        } catch (e) {
             toast.error($i18n.t('Failed to save limits'));
         }
     }
@@ -139,21 +109,13 @@
         }
     }
 
-    function gotoPrev() { page = Math.max(1, page - 1); }
-    function gotoNext() { page = Math.min(pageCount(), page + 1); }
-    function onChangePageSize(e: Event) {
-        const val = Number((e.target as HTMLSelectElement).value);
-        pageSize = Number.isFinite(val) ? val : 200;
-        page = 1;
-    }
-
     onMount(loadUsers);
 </script>
 
 <div class="container mx-auto p-4">
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-        <h2 class="text-2xl font-bold mb-6 dark:text-white">{$i18n.t('토큰 관리')}</h2>
-
+        <h2 class="text-2xl font-bold mb-6 dark:text-white">{$i18n.t('')}</h2>
+        
         {#if loading}
             <div class="flex justify-center items-center h-32">
                 <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-white"></div>
@@ -163,60 +125,60 @@
                 <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                     <thead class="bg-gray-50 dark:bg-gray-700">
                         <tr>
-                            <th
-                                class="px-6 py-3 text-left text-xs font-large text-gray-500 dark:text-gray-300 uppercase tracking-wider cursor-pointer select-none"
-                                on:click={() => setSort('user_name')}
-                            >
+                            <th class="px-6 py-3 text-left text-xs font-large text-gray-500 dark:text-gray-300 uppercase tracking-wider cursor-pointer"
+    on:click={() => setSort('user_name')}>
                                 {$i18n.t('사용자명')}
-                                {#if sortKey === 'user_name'}{#if sortOrder === 'asc'} ▲ {:else} ▼ {/if}{/if}
+				  {#if sortKey === 'user_name'}
+    {#if sortOrder === 'asc'}
+      ▲
+    {:else}
+      ▼
+    {/if}
+  {/if}
                             </th>
-
-                            <th
-                                class="px-6 py-3 text-left text-xs font-large text-gray-500 dark:text-gray-300 uppercase tracking-wider cursor-pointer select-none"
-                                on:click={() => setSort('email')}
-                            >
-                                {$i18n.t('이메일')}
-                                {#if sortKey === 'email'}{#if sortOrder === 'asc'} ▲ {:else} ▼ {/if}{/if}
-                            </th>
-
-                            <th
-                                class="px-6 py-3 text-left text-xs font-large text-gray-500 dark:text-gray-300 uppercase tracking-wider cursor-pointer select-none"
-                                on:click={() => setSort('monthly_tokens')}
-                            >
+                            <th class="px-6 py-3 text-left text-xs font-large text-gray-500 dark:text-gray-300 uppercase tracking-wider cursor-pointer"
+    on:click={() => setSort('monthly_tokens')}>
                                 {$i18n.t('토큰 사용량(월)')}
-                                {#if sortKey === 'monthly_tokens'}{#if sortOrder === 'asc'} ▲ {:else} ▼ {/if}{/if}
+  {#if sortKey === 'monthly_tokens'}
+    {#if sortOrder === 'asc'}
+      ▲
+    {:else}
+      ▼
+    {/if}
+  {/if}
                             </th>
-
-                            <th
-                                class="px-6 py-3 text-left text-xs font-large text-gray-500 dark:text-gray-300 uppercase tracking-wider cursor-pointer select-none"
-                                on:click={() => setSort('monthly_requests')}
-                            >
+                            <th class="px-6 py-3 text-left text-xs font-large text-gray-500 dark:text-gray-300 uppercase tracking-wider cursor-pointer"
+    on:click={() => setSort('monthly_requests')}>
                                 {$i18n.t('요청 횟수(월)')}
-                                {#if sortKey === 'monthly_requests'}{#if sortOrder === 'asc'} ▲ {:else} ▼ {/if}{/if}
+  {#if sortKey === 'monthly_requests'}
+    {#if sortOrder === 'asc'}
+      ▲
+    {:else}
+      ▼
+    {/if}
+  {/if}
                             </th>
-
-                            <th
-                                class="px-6 py-3 text-left text-xs font-large text-gray-500 dark:text-gray-300 uppercase tracking-wider cursor-pointer select-none"
-                                on:click={() => setSort('last_activity')}
-                            >
+                            <th class="px-6 py-3 text-left text-xs font-large text-gray-500 dark:text-gray-300 uppercase tracking-wider cursor-pointer"
+    on:click={() => setSort('last_activity')}>
                                 {$i18n.t('마지막 활동')}
-                                {#if sortKey === 'last_activity'}{#if sortOrder === 'asc'} ▲ {:else} ▼ {/if}{/if}
+  {#if sortKey === 'last_activity'}
+    {#if sortOrder === 'asc'}
+      ▲
+    {:else}
+      ▼
+    {/if}
+  {/if}
                             </th>
-
                             <th class="px-6 py-3 text-left text-xs font-large text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                                 {$i18n.t('사용량 수정')}
                             </th>
                         </tr>
                     </thead>
-
                     <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                        {#each pageSlice() as user (user.user_id)}
+                        {#each users as user}
                             <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-300">
                                     {user.user_name}
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-300">
-                                    {user.email}
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-300">
                                     {user.monthly_tokens}
@@ -225,10 +187,10 @@
                                     {user.monthly_requests}
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-300">
-                                    {user.last_activity ? user.last_activity.slice(0, 19).replace('T', ' ') : ''}
+                                    {user.last_activity?.slice(0, 19).replace('T', ' ')}
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm">
-                                    <button
+                                    <button 
                                         class="inline-flex items-center px-3 py-1.5 text-sm font-medium text-indigo-600 bg-indigo-50 rounded-md hover:bg-indigo-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-200 dark:bg-indigo-900/30 dark:text-indigo-400 dark:hover:bg-indigo-900/50"
                                         on:click={(e) => selectUser(user, e)}
                                     >
@@ -240,71 +202,34 @@
                     </tbody>
                 </table>
             </div>
-
-            <!-- 페이지네이션 -->
-            <div class="mt-4 flex flex-wrap items-center gap-2">
-                <button
-                    class="px-3 py-1 border rounded disabled:opacity-50"
-                    on:click={gotoPrev}
-                    disabled={page === 1}
-                >
-                    {$i18n.t('이전')}
-                </button>
-
-                <span class="text-sm">
-                    {$i18n.t('페이지')} {page} / {pageCount()}
-                </span>
-
-                <button
-                    class="px-3 py-1 border rounded disabled:opacity-50"
-                    on:click={gotoNext}
-                    disabled={page === pageCount()}
-                >
-                    {$i18n.t('다음')}
-                </button>
-
-                <div class="ml-2 flex items-center gap-2">
-                    <label class="text-sm text-gray-600 dark:text-gray-300">{$i18n.t('페이지 크기')}</label>
-                    <select
-                        class="border rounded px-2 py-1 text-sm dark:bg-gray-700 dark:border-gray-600"
-                        value={pageSize}
-                        on:change={onChangePageSize}
-                    >
-                        <option value="100">100</option>
-                        <option value="200">200</option>
-                        <option value="500">500</option>
-                    </select>
-                </div>
-            </div>
         {/if}
     </div>
 </div>
 
 {#if showModal && selectedUser && userLimits}
-    <div
+    <div 
         class="fixed z-50"
         style="left: {modalPosition.x}px; top: {modalPosition.y}px;"
     >
         <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-4 w-80 transform transition-all border border-gray-200 dark:border-gray-700">
             <div class="flex justify-between items-center mb-3">
                 <h3 class="text-sm font-semibold dark:text-white">
-                    {selectedUser.user_name} ({selectedUser.user_id}) {$i18n.t('님 토큰 수정')}
+                    {selectedUser.user_name} {$i18n.t('님 토큰 수정')}
                 </h3>
-                <button
+                <button 
                     class="inline-flex items-center px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors duration-200 dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-600 whitespace-nowrap"
                     on:click={closeModal}
                 >
                     {$i18n.t('닫기')}
                 </button>
             </div>
-
             <div class="space-y-3">
                 <div>
                     <label class="block text-xs font-medium text-gray-700 dark:text-gray-300">
                         {$i18n.t('일별 토큰 제한')}
                     </label>
-                    <input
-                        type="number"
+                    <input 
+                        type="number" 
                         bind:value={userLimits.daily_token_limit}
                         class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-600 dark:border-gray-500 dark:text-white text-sm"
                     />
@@ -313,8 +238,8 @@
                     <label class="block text-xs font-medium text-gray-700 dark:text-gray-300">
                         {$i18n.t('월별 토큰 제한')}
                     </label>
-                    <input
-                        type="number"
+                    <input 
+                        type="number" 
                         bind:value={userLimits.monthly_token_limit}
                         class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-600 dark:border-gray-500 dark:text-white text-sm"
                     />
@@ -323,8 +248,8 @@
                     <label class="block text-xs font-medium text-gray-700 dark:text-gray-300">
                         {$i18n.t('일별 요청 횟수 제한')}
                     </label>
-                    <input
-                        type="number"
+                    <input 
+                        type="number" 
                         bind:value={userLimits.daily_request_limit}
                         class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-600 dark:border-gray-500 dark:text-white text-sm"
                     />
@@ -333,16 +258,16 @@
                     <label class="block text-xs font-medium text-gray-700 dark:text-gray-300">
                         {$i18n.t('월별 요청 횟수 제한')}
                     </label>
-                    <input
-                        type="number"
+                    <input 
+                        type="number" 
                         bind:value={userLimits.monthly_request_limit}
                         class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-600 dark:border-gray-500 dark:text-white text-sm"
                     />
                 </div>
                 <div>
                     <label class="inline-flex items-center">
-                        <input
-                            type="checkbox"
+                        <input 
+                            type="checkbox" 
                             bind:checked={userLimits.enabled}
                             class="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-500"
                         />
@@ -352,15 +277,14 @@
                     </label>
                 </div>
             </div>
-
             <div class="mt-4 flex justify-end space-x-2">
-                <button
+                <button 
                     class="inline-flex items-center px-3 py-1.5 text-sm font-medium text-rose-600 bg-rose-50 rounded-lg hover:bg-rose-100 focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:ring-offset-1 transition-all duration-200 dark:bg-rose-900/20 dark:text-rose-400 dark:hover:bg-rose-900/30 shadow-sm"
                     on:click={handleResetUsage}
                 >
                     {$i18n.t('사용량 리셋')}
                 </button>
-                <button
+                <button 
                     class="inline-flex items-center px-3 py-1.5 text-sm font-medium text-indigo-600 bg-indigo-50 rounded-md hover:bg-indigo-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-200 dark:bg-indigo-900/30 dark:text-indigo-400 dark:hover:bg-indigo-900/50"
                     on:click={saveLimits}
                 >
@@ -370,4 +294,3 @@
         </div>
     </div>
 {/if}
-

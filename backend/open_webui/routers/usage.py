@@ -19,6 +19,7 @@ async def get_user_usage(user=Depends(get_current_user)):
         # 응답 데이터 구조화
         response_data = {
             "user_id": user.id,
+            "email": user.email,
             "user_name": user.name,
             "limits": usage_details.get("limits", {}),
             "current_usage": usage_details.get("current_usage", []),

@@ -199,17 +199,18 @@ def upload_file_handler(
         name = filename
         filename = f"{id}_{filename}"
 
+        tags = {
+            "OpenWebUI-User-Email": user.email,
+            "OpenWebUI-User-Id": user.id,
+            "OpenWebUI-User-Name": user.name,
+            "OpenWebUI-File-Id": id,
+        }
 
         filedata = [id, name, filename, tags]
         contents, file_path = Storage.upload_file(
             file.file,
             filename,
-            {
-                "OpenWebUI-User-Email": user.email,
-                "OpenWebUI-User-Id": user.id,
-                "OpenWebUI-User-Name": user.name,
-                "OpenWebUI-File-Id": id,
-            },
+            tags,
         )
         file_item = Files.insert_new_file(
             user.id,
@@ -232,7 +233,6 @@ def upload_file_handler(
         )
 
         if process:
-<<<<<<< HEAD
             try:
                 if file.content_type:
                     if file.content_type.startswith("audio/") or file.content_type in {
@@ -265,7 +265,8 @@ def upload_file_handler(
                         **file_item.model_dump(),
                         "error": str(e.detail) if hasattr(e, "detail") else str(e),
                     }
-=======
+                )
+                
             if background_tasks and process_in_background:
                 background_tasks.add_task(
                     process_uploaded_file,
@@ -275,7 +276,6 @@ def upload_file_handler(
                     file_item,
                     file_metadata,
                     user,
->>>>>>> v0.6.31
                 )
                 return {"status": True, **file_item.model_dump()}
             else:

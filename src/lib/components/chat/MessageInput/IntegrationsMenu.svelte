@@ -3,6 +3,7 @@
 	import { getContext, onMount, tick } from 'svelte';
 	import { fly } from 'svelte/transition';
 	import { flyAndScale } from '$lib/utils/transitions';
+	import LightBulb from '../../icons/LightBulb.svelte';
 
 	import { config, user, tools as _tools, mobile, settings, toolServers } from '$lib/stores';
 
@@ -39,6 +40,10 @@
 	export let imageGenerationEnabled = false;
 	export let showCodeInterpreterButton = false;
 	export let codeInterpreterEnabled = false;
+	// 질문 증강 변수 추가
+	export let questionAugmentation = false;
+	export let onAugment: () => Promise<void>; // 실행할 함수
+	let augmentLoading = false;
 
 	export let onShowValves: Function;
 	export let onClose: Function;
@@ -139,6 +144,48 @@
 						<div class="py-4">
 							<Spinner />
 						</div>
+					{/if}
+					
+					{#if questionAugmentation}		
+					<!-- 질문증강 로직 추가 -->
+					<Tooltip content={$i18n.t('AI를 통한 질문 구체화')} placement="top-start">
+						<button
+							class="flex w-full justify-between gap-2 items-center px-3 py-1.5 text-sm cursor-pointer rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800/50 disabled:opacity-50"
+							on:click={async () => {
+								if (augmentLoading) return;
+								augmentLoading = true;
+								try {
+									await onAugment();
+								} finally {
+									augmentLoading = false;
+								}
+							}}
+							disabled={augmentLoading}
+						>
+							<div class="flex-1 truncate">
+								<div class="flex flex-1 gap-2 items-center">
+									<div class="shrink-0">
+									<LightBulb className="size-4" strokeWidth="1.75" />
+									</div>
+									<div class="truncate">{$i18n.t('질문 증강')}</div>
+								</div>
+							</div>
+
+							<div class="shrink-0">
+								{#if augmentLoading}
+									<Spinner className="size-3.5" />
+								{:else}
+									<svg xmlns="http://www.w3.org/2000/svg" class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+										<path d="M0 0h24v24H0z" fill="none"/>
+										<path d="M6 21l15 -15l-3 -3l-15 15l3 3" />
+										<path d="M15 6l3 3" />
+										<path d="M9 3a2 2 0 0 0 2 2a2 2 0 0 0 -2 2a2 2 0 0 0 -2 -2a2 2 0 0 0 2 -2" />
+										<path d="M19 13a2 2 0 0 0 2 2a2 2 0 0 0 -2 2a2 2 0 0 0 -2 -2a2 2 0 0 0 2 -2" />
+									</svg>
+								{/if}
+							</div>
+						</button>
+					</Tooltip>
 					{/if}
 
 					{#if toggleFilters && toggleFilters.length > 0}

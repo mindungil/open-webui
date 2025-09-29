@@ -112,6 +112,8 @@
 	export let webSearchEnabled = false;
 	export let codeInterpreterEnabled = false;
 
+	export let questionAugmentation = false; // 질문 증강 변수 추가
+
 	let showInputVariablesModal = false;
 	let inputVariablesModalCallback = (variableValues) => {};
 	let inputVariables = {};
@@ -1511,20 +1513,6 @@
 											</div>
 										</InputMenu>
 
-										<!-- 질문 증강 버튼 추가 -->
-										<Tooltip content={$i18n.t('AI를 통한 질문 구체화')} placement="top">
-											<button
-												on:click|preventDefault={handleQuestionAugmentation}
-												type="button"
-												class="px-2 @xl:px-2.5 py-2 flex gap-1.5 items-center text-sm rounded-full transition-colors duration-300 focus:outline-hidden max-w-full overflow-hidden hover:bg-gray-50 dark:hover:bg-gray-800 bg-transparent text-gray-600 dark:text-gray-300"
-											>
-												<LightBulb className="size-4" strokeWidth="1.75" />
-												<span class="hidden @xl:block whitespace-nowrap overflow-hidden text-ellipsis leading-none pr-0.5">
-													{$i18n.t('질문 증강')}
-												</span>
-											</button>
-										</Tooltip>
-
 										{#if $_user && (showToolsButton || (toggleFilters && toggleFilters.length > 0) || showWebSearchButton || showImageGenerationButton || showCodeInterpreterButton)}
 											<div
 												class="flex self-center w-[1px] h-4 mx-1.5 bg-gray-50 dark:bg-gray-800"
@@ -1538,6 +1526,8 @@
 												{showWebSearchButton}
 												{showImageGenerationButton}
 												{showCodeInterpreterButton}
+												questionAugmentation={true}
+  												onAugment={handleQuestionAugmentation}
 												bind:selectedToolIds
 												bind:selectedFilterIds
 												bind:webSearchEnabled

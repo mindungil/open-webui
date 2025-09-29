@@ -3,7 +3,7 @@ import { browser, dev } from '$app/environment';
 
 export const APP_NAME = '전북특별자치도청 AI 챗봇';
 
-export const WEBUI_HOSTNAME = "220.124.155.35:8083";
+export const WEBUI_HOSTNAME = "220.124.155.35:8081";
 export const WEBUI_BASE_URL = `http://${WEBUI_HOSTNAME}`;
 export const WEBUI_API_BASE_URL = `${WEBUI_BASE_URL}/api/v1`;
 

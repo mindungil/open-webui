@@ -972,9 +972,12 @@
             // ✅ 결과 적용: 한 문장 질문만 입력창에 반영
             prompt = result.augmented_question;
 
-            // 입력창 포커스
-            const chatInput = document.getElementById('chat-input');
-            chatInput?.focus();
+            // v0.6.31 오류 수정
+			// getElememtById 를 수정해도 Text는 바뀌지 않음
+			// 따라서 chatInputElement.setText()로 직접 변경
+            // 증강된 질문을 입력창에 세팅
+			chatInputElement.setText(prompt);
+			chatInputElement.focus();
         } catch (error) {
             console.error('Error augmenting question:', error);
             toast.error($i18n.t('Failed to augment question'));

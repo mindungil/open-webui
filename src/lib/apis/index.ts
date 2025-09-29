@@ -1681,6 +1681,7 @@ export async function augmentQuestion(token: string, modelId: string, question: 
 		const error = await response.json();
 		throw new Error(error.detail || 'Failed to augment question');
 	}
+	const answer = await response.json();
 
-	return await response.json(); // { augmented_question: "..." }
+	return answer; // { augmented_question: "..." }
 }

@@ -231,7 +231,7 @@
 							}}
 						>
 							<div class="mb-1 flex flex-col items-center">
-								<img src="{WEBUI_BASE_URL}/static/jblogo.png" alt="전북특별자치도 로고" class="mx-auto mb-6 w-128 h-32 object-contain" />
+								<img src="static/jblogo.png" alt="전북특별자치도 로고" class="mx-auto mb-6 w-128 h-32 object-contain" />
 								<div class="text-2xl font-medium text-center leading-snug">
 									{#if $config?.onboarding ?? false}
 										{$i18n.t(`Get started with {{WEBUI_NAME}}`, { WEBUI_NAME: $WEBUI_NAME })}
@@ -254,77 +254,7 @@
 									</div>
 								{/if}
 							</div>
-
-							{#if $config?.features.enable_login_form || $config?.features.enable_ldap}
-								<div class="flex flex-col mt-4">
-									{#if mode === 'signup'}
-										<div class="mb-2">
-											<label for="name" class="text-sm font-medium text-left mb-1 block"
-												>{$i18n.t('Name')}</label
-											>
-											<input
-												bind:value={name}
-												type="text"
-												id="name"
-												class="my-0.5 w-full text-sm outline-hidden bg-transparent"
-												autocomplete="name"
-												placeholder={$i18n.t('Enter Your Full Name')}
-												required
-											/>
-										</div>
-									{/if}
-
-									{#if mode === 'ldap'}
-										<div class="mb-2">
-											<label for="username" class="text-sm font-medium text-left mb-1 block"
-												>{$i18n.t('Username')}</label
-											>
-											<input
-												bind:value={ldapUsername}
-												type="text"
-												class="my-0.5 w-full text-sm outline-hidden bg-transparent"
-												autocomplete="username"
-												name="username"
-												id="username"
-												placeholder={$i18n.t('Enter Your Username')}
-												required
-											/>
-										</div>
-									{:else}
-										<div class="mb-2">
-											<label for="email" class="text-sm font-medium text-left mb-1 block"
-												>{$i18n.t('Email')}</label
-											>
-											<input
-												bind:value={email}
-												type="email"
-												id="email"
-												class="my-0.5 w-full text-sm outline-hidden bg-transparent"
-												autocomplete="email"
-												name="email"
-												placeholder={$i18n.t('Enter Your Email')}
-												required
-											/>
-										</div>
-									{/if}
-
-									<div>
-										<label for="password" class="text-sm font-medium text-left mb-1 block"
-											>{$i18n.t('Password')}</label
-										>
-										<input
-											bind:value={password}
-											type="password"
-											id="password"
-											class="my-0.5 w-full text-sm outline-hidden bg-transparent"
-											placeholder={$i18n.t('Enter Your Password')}
-											autocomplete="current-password"
-											name="current-password"
-											required
-										/>
-									</div>
-								</div>
-							{/if}
+								
 							<form
 								class=" flex flex-col justify-center"
 								on:submit={(e) => {
@@ -645,7 +575,7 @@
 									</button>
 								</div>
 							{/if}
-						</div>
+						</form>
 						{#if $config?.metadata?.login_footer}
 							<div class="max-w-3xl mx-auto">
 								<div class="mt-2 text-[0.7rem] text-gray-500 dark:text-gray-400 marked">

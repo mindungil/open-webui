@@ -456,6 +456,7 @@
 	};
 
 	const isWindows = /Windows/i.test(navigator.userAgent);
+	const faviconUrl = `${WEBUI_BASE_URL}/static/favicon.png`;
 </script>
 
 <ArchivedChatsModal
@@ -548,7 +549,7 @@
 						<div class=" self-center flex items-center justify-center size-9">
 							<img
 								crossorigin="anonymous"
-								src="/static/favicon.png"
+								src={faviconUrl}
 								class="sidebar-new-chat-icon size-6 rounded-full group-hover:hidden"
 								alt=""
 							/>
@@ -726,7 +727,7 @@
 				>
 					<img
 						crossorigin="anonymous"
-						src="static/favicon.png"
+						src={faviconUrl}
 						class="sidebar-new-chat-icon size-6 rounded-full"
 						alt=""
 					/>

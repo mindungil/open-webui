@@ -69,4 +69,4 @@
 			{/if}
 		</DropdownMenu.Content>
 	</slot>
-</DropdownMenu.Root>
+</LinkPreview.Root>

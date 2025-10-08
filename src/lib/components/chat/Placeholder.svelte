@@ -7,6 +7,9 @@
 
 	const dispatch = createEventDispatcher();
 
+	import { getChatList } from '$lib/apis/chats';
+	import { updateFolderById } from '$lib/apis/folders';
+
 	import {
 		config,
 		user,
@@ -25,7 +28,6 @@
 	import MessageInput from './MessageInput.svelte';
 	import FolderPlaceholder from './Placeholder/FolderPlaceholder.svelte';
 	import FolderTitle from './Placeholder/FolderTitle.svelte';
-	import { getChatList } from '$lib/apis/chats';
 
 	const i18n = getContext('i18n');
 
@@ -58,7 +60,6 @@
 	export let toolServers = [];
 
 	let models = [];
-
 	let selectedModelIdx = 0;
 
 	$: if (selectedModels.length > 0) {
@@ -66,8 +67,6 @@
 	}
 
 	$: models = selectedModels.map((id) => $_models.find((m) => m.id === id));
-
-	onMount(() => {});
 </script>
 
 <div class="m-auto w-full max-w-6xl px-2 @2xl:px-20 translate-y-6 py-24 text-center">
@@ -87,18 +86,72 @@
 		class="w-full text-3xl text-gray-800 dark:text-gray-100 text-center flex items-center gap-4 font-primary"
 	>
 		<div class="w-full flex flex-col justify-center items-center">
-			<div class="flex flex-row justify-center w-fit px-5">
-				<div class="flex shrink-0 justify-center">
-					<div class="flex mb-0.5" in:fade={{ duration: 100 }}>
-						<img
-							src="/static/jblogo.png"
-							class="w-96 h-96 object-contain"
-							alt="JB Logo"
-							draggable="false"
-						/>
+			{#if $selectedFolder}
+				<FolderTitle
+					folder={$selectedFolder}
+					onUpdate={async (folder) => {
+						await chats.set(await getChatList(localStorage.token, $currentChatPage));
+						currentChatPage.set(1);
+					}}
+					onDelete={async () => {
+						await chats.set(await getChatList(localStorage.token, $currentChatPage));
+						currentChatPage.set(1);
+
+						selectedFolder.set(null);
+					}}
+				/>
+			{:else}
+				<div class="flex flex-row justify-center gap-3 @sm:gap-3.5 w-fit px-5 max-w-xl">
+					<div class="flex shrink-0 justify-center">
+						<div class="flex -space-x-4 mb-0.5" in:fade={{ duration: 100 }}>
+							{#each models as model, modelIdx}
+								<Tooltip
+									content={(models[modelIdx]?.info?.meta?.tags ?? [])
+										.map((tag) => tag.name.toUpperCase())
+										.join(', ')}
+									placement="top"
+								>
+									<button
+										aria-hidden={models.length <= 1}
+										aria-label={$i18n.t('Get information on {{name}} in the UI', {
+											name: models[modelIdx]?.name
+										})}
+										on:click={() => {
+											selectedModelIdx = modelIdx;
+										}}
+									>
+										<img
+											src="/static/jblogo.png"
+											class="w-96 h-96 object-contain"
+											alt="JB Logo"
+											draggable="false"
+										/>
+									</button>
+								</Tooltip>
+							{/each}
+						</div>
+					</div>
+
+					<div
+						class=" text-3xl @sm:text-3xl line-clamp-1 flex items-center"
+						in:fade={{ duration: 100 }}
+					>
+						{#if models[selectedModelIdx]?.name}
+							<Tooltip
+								content={models[selectedModelIdx]?.name}
+								placement="top"
+								className=" flex items-center "
+							>
+								<span class="line-clamp-1">
+									{models[selectedModelIdx]?.name}
+								</span>
+							</Tooltip>
+						{:else}
+							{$i18n.t('Hello, {{name}}', { name: $user?.name })}
+						{/if}
 					</div>
 				</div>
-			</div>
+			{/if}
 			<div class="text-base font-normal @md:max-w-3xl w-full py-3 {atSelectedModel ? 'mt-2' : ''}">
 				<MessageInput
 					bind:this={messageInput}

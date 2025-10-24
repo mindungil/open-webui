@@ -122,6 +122,11 @@
 	let showValvesModal = false;
 	let selectedValvesType = 'tool'; // 'tool' or 'function'
 	let selectedValvesItemId = null;
+	let integrationsMenuCloseOnOutsideClick = true;
+
+	$: if (!showValvesModal) {
+		integrationsMenuCloseOnOutsideClick = true;
+	}
 
 	$: onChange({
 		prompt,
@@ -1008,6 +1013,9 @@
 	on:save={async () => {
 		await tick();
 	}}
+	on:close={() => {
+		integrationsMenuCloseOnOutsideClick = true;
+	}}
 />
 
 {#if loaded}
@@ -1522,6 +1530,57 @@
 														content={$i18n.t('{{COUNT}} Available Tools', {
 															COUNT: toolServers.length + selectedToolIds.length
 														})}
+										<div
+											class="flex self-center w-[1px] h-4 mx-1 bg-gray-200/50 dark:bg-gray-800/50"
+										/>
+
+										{#if showWebSearchButton || showImageGenerationButton || showCodeInterpreterButton || showToolsButton || (toggleFilters && toggleFilters.length > 0)}
+											<IntegrationsMenu
+												selectedModels={atSelectedModel ? [atSelectedModel.id] : selectedModels}
+												{toggleFilters}
+												{showWebSearchButton}
+												{showImageGenerationButton}
+												{showCodeInterpreterButton}
+												bind:selectedToolIds
+												bind:selectedFilterIds
+												bind:webSearchEnabled
+												bind:imageGenerationEnabled
+												bind:codeInterpreterEnabled
+												closeOnOutsideClick={integrationsMenuCloseOnOutsideClick}
+												onShowValves={(e) => {
+													const { type, id } = e;
+													selectedValvesType = type;
+													selectedValvesItemId = id;
+													showValvesModal = true;
+													integrationsMenuCloseOnOutsideClick = false;
+												}}
+												onClose={async () => {
+													await tick();
+
+													const chatInput = document.getElementById('chat-input');
+													chatInput?.focus();
+												}}
+											>
+												<div
+													id="integration-menu-button"
+													class="bg-transparent hover:bg-gray-100 text-gray-700 dark:text-white dark:hover:bg-gray-800 rounded-full size-8 flex justify-center items-center outline-hidden focus:outline-hidden"
+												>
+													<Component className="size-4.5" strokeWidth="1.5" />
+												</div>
+											</IntegrationsMenu>
+										{/if}
+
+										{#if selectedModelIds.length === 1 && $models.find((m) => m.id === selectedModelIds[0])?.has_user_valves}
+											<div class="ml-1 flex gap-1.5">
+												<Tooltip content={$i18n.t('Valves')} placement="top">
+													<button
+														id="model-valves-button"
+														class="bg-transparent hover:bg-gray-100 text-gray-700 dark:text-white dark:hover:bg-gray-800 rounded-full size-8 flex justify-center items-center outline-hidden focus:outline-hidden"
+														on:click={() => {
+															selectedValvesType = 'function';
+															selectedValvesItemId = selectedModelIds[0]?.split('.')[0];
+															showValvesModal = true;
+														}}
 													>
 														<button
 															class="translate-y-[0.5px] flex gap-1 items-center text-gray-600 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-200 rounded-lg p-1 self-center transition"

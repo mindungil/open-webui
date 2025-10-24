@@ -10,6 +10,13 @@ class APIUsageTracker:
     """API 사용량 추적 및 제한 관리 클래스"""
     
     @staticmethod
+    def _parse_datetime(dt_value):
+        """datetime 값을 안전하게 파싱 (MySQL->PostgreSQL 마이그레이션 대응)"""
+        if isinstance(dt_value, str):
+            return datetime.fromisoformat(dt_value.replace('Z', '+00:00'))
+        return dt_value
+    
+    @staticmethod
     def get_external_usage_sum(user_id):
         """
         외부 API(vllm:8000 제외, 즉 url_idx > 0) 전체 사용량 합산
@@ -123,11 +130,16 @@ class APIUsageTracker:
             if not usage:
                 usage = UserAPIUsageTable.create_user_usage(user_id, api_type, url_idx)
             
-            # 일일/월별 리셋 확인
+            # 일일/월별 리셋 확인 (MySQL->PostgreSQL 마이그레이션 대응)
             now = datetime.now()
-            reset_daily = usage.last_daily_reset.date() < now.date()
-            reset_monthly = (usage.last_monthly_reset.month != now.month or 
-                           usage.last_monthly_reset.year != now.year)
+            
+            # 문자열로 저장된 datetime 처리
+            last_daily = APIUsageTracker._parse_datetime(usage.last_daily_reset)
+            last_monthly = APIUsageTracker._parse_datetime(usage.last_monthly_reset)
+            
+            reset_daily = last_daily.date() < now.date()
+            reset_monthly = (last_monthly.month != now.month or 
+                           last_monthly.year != now.year)
             
             # 사용량 계산
             new_daily_tokens = total_tokens if reset_daily else usage.daily_tokens + total_tokens
@@ -184,23 +196,23 @@ class APIUsageTracker:
             from open_webui.models.usage import UserAPIUsage
             
             with get_db() as db:
-                # 오늘과 이번 달 기준점
-                today = datetime.now().date()
-                this_month_start = datetime.now().replace(day=1).date()
+                now = datetime.now()
+                today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                this_month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
                 
                 # 전체 사용자 수
-                total_users = db.query(func.count(func.distinct(UserAPIUsage.user_id))).scalar() or 0
+                total_users = db.query(func.count(func.distinct(UserAPIUsage.user_id))).scalar()
                 
-                # 일일 통계 (오늘 사용량)
+                # 일일 사용량
                 daily_stats = db.query(
                     func.sum(UserAPIUsage.daily_tokens).label('tokens'),
                     func.sum(UserAPIUsage.daily_requests).label('requests'),
                     func.sum(UserAPIUsage.daily_cost).label('cost')
                 ).filter(
-                    func.date(UserAPIUsage.last_daily_reset) == today
+                    func.date(UserAPIUsage.last_daily_reset) >= today_start
                 ).first()
                 
-                # 월별 통계 (이번 달 사용량)
+                # 월별 사용량
                 monthly_stats = db.query(
                     func.sum(UserAPIUsage.monthly_tokens).label('tokens'),
                     func.sum(UserAPIUsage.monthly_requests).label('requests'),
@@ -270,9 +282,13 @@ class APIUsageTracker:
             
             current_usage = []
             for usage in usages:
-                daily_reset_needed = usage.last_daily_reset.date() < now.date()
-                monthly_reset_needed = (usage.last_monthly_reset.month != now.month or 
-                                      usage.last_monthly_reset.year != now.year)
+                # MySQL->PostgreSQL 마이그레이션 대응: 문자열 datetime 처리
+                last_daily = APIUsageTracker._parse_datetime(usage.last_daily_reset)
+                last_monthly = APIUsageTracker._parse_datetime(usage.last_monthly_reset)
+                
+                daily_reset_needed = last_daily.date() < now.date()
+                monthly_reset_needed = (last_monthly.month != now.month or 
+                                      last_monthly.year != now.year)
                 
                 current_usage.append({
                     "api_type": usage.api_type,
@@ -283,8 +299,8 @@ class APIUsageTracker:
                     "monthly_requests": 0 if monthly_reset_needed else usage.monthly_requests,
                     "daily_cost": 0.0 if daily_reset_needed else usage.daily_cost,
                     "monthly_cost": 0.0 if monthly_reset_needed else usage.monthly_cost,
-                    "last_daily_reset": usage.last_daily_reset.isoformat(),
-                    "last_monthly_reset": usage.last_monthly_reset.isoformat(),
+                    "last_daily_reset": last_daily.isoformat(),
+                    "last_monthly_reset": last_monthly.isoformat(),
                     "needs_daily_reset": daily_reset_needed,
                     "needs_monthly_reset": monthly_reset_needed
                 })

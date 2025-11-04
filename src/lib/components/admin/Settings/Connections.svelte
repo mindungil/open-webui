@@ -187,7 +187,21 @@
 			if (ENABLE_OLLAMA_API) {
 				for (const [idx, url] of OLLAMA_BASE_URLS.entries()) {
 					if (!OLLAMA_API_CONFIGS[idx]) {
-						OLLAMA_API_CONFIGS[idx] = OLLAMA_API_CONFIGS[url] || {};
+						try {
+							// url이 없을 경우 uncaught error 방지
+							if(!url) continue;
+							OLLAMA_API_CONFIGS[idx] = OLLAMA_API_CONFIGS[url] || {};
+						}
+						catch (e) {
+							console.error('OLLMA_API 오류 발생!');
+							console.log('e 전체:', e);
+							console.log('message:', e.message);
+							console.log('stack:', e.stack);
+							if (e.response) {
+								console.log('응답 상태:', e.response.status);
+								console.log('응답 데이터:', e.response.data);
+							}
+						}
 					}
 				}
 			}

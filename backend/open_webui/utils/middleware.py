@@ -1577,21 +1577,12 @@ async def process_chat_response(
                                         "message", {}
                                     )
 
-<<<<<<< HEAD
-                                    title_string = response_message.get(
-                                        "content",
-                                        response_message.get(
-                                            "reasoning_content",
-                                            message.get("content", user_message),
-                                        ),
-=======
                                     title_string = (
                                         response_message.get("content")
                                         or response_message.get(
                                             "reasoning_content",
                                         )
                                         or message.get("content", user_message)
->>>>>>> v0.6.34
                                     )
                                 else:
                                     title_string = ""
@@ -1647,17 +1638,6 @@ async def process_chat_response(
                             if len(res.get("choices", [])) == 1:
                                 response_message = res.get("choices", [])[0].get(
                                     "message", {}
-<<<<<<< HEAD
-                                )
-
-                                tags_string = response_message.get(
-                                    "content",
-                                    response_message.get("reasoning_content", ""),
-                                )
-                            else:
-                                tags_string = ""
-
-=======
                                 )
 
                                 tags_string = response_message.get(
@@ -1666,7 +1646,6 @@ async def process_chat_response(
                             else:
                                 tags_string = ""
 
->>>>>>> v0.6.34
                             tags_string = tags_string[
                                 tags_string.find("{") : tags_string.rfind("}") + 1
                             ]

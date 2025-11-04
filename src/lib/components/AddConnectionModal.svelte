@@ -97,7 +97,6 @@
 					auth_type,
 					azure: azure,
 					api_version: apiVersion,
-					headers: JSON.parse(headers)
 					...(_headers ? { headers: _headers } : {})
 				}
 			},

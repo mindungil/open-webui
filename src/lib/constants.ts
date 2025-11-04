@@ -1,10 +1,11 @@
 import { browser, dev } from '$app/environment';
 // import { version } from '../../package.json';
 
-export const APP_NAME = '전북특별자치도청 AI 챗봇';
+export const APP_NAME = '전북도 생성형 AI 시스템';
 
-export const WEBUI_HOSTNAME = "220.124.155.35:8081";
-export const WEBUI_BASE_URL = `http://${WEBUI_HOSTNAME}`;
+export const WEBUI_HOSTNAME = "ai.jb.go.kr";
+export const WEBUI_BASE_URL = `https://${WEBUI_HOSTNAME}`;
+
 export const WEBUI_API_BASE_URL = `${WEBUI_BASE_URL}/api/v1`;
 
 export const OLLAMA_API_BASE_URL = `${WEBUI_BASE_URL}/ollama`;

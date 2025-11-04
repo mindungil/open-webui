@@ -5,4 +5,4 @@ export DATABASE_URL="postgresql://admin:wjsqnrai@172.17.0.1:5432/webui"
 
 
 PORT="${PORT:-8080}"
-/workspace/open-webui/backend/venv/bin/uvicorn socketio_app:app --port $PORT --host 0.0.0.0 --forwarded-allow-ips '*' --reload
+uvicorn open_webui.main:app --port $PORT --host 0.0.0.0 --forwarded-allow-ips '*' --reload

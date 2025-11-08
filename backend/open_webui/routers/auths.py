@@ -806,6 +806,9 @@ async def get_admin_details(request: Request, user=Depends(get_current_user)):
             if admin:
                 admin_email = admin.email
                 admin_name = admin.name
+                
+        admin_email = "soet02@jbnu.ac.kr"
+        admin_name = "길민준"
 
         return {
             "name": admin_name,

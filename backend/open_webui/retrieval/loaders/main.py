@@ -407,6 +407,10 @@ class Loader:
             )
         else:
             if file_ext == "pdf":
+                # from open_webui.retrieval.loaders.chandra_loader import ChandraLoader
+                # loader = ChandraLoader(
+                #     file_path, 
+                # )
                 loader = PyPDFLoader(
                     file_path, extract_images=self.kwargs.get("PDF_EXTRACT_IMAGES")
                 )

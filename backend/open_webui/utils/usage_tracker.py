@@ -132,14 +132,20 @@ class APIUsageTracker:
             
             # 일일/월별 리셋 확인 (MySQL->PostgreSQL 마이그레이션 대응)
             now = datetime.now()
-            
-            # 문자열로 저장된 datetime 처리
-            last_daily = APIUsageTracker._parse_datetime(usage.last_daily_reset)
-            last_monthly = APIUsageTracker._parse_datetime(usage.last_monthly_reset)
-            
-            reset_daily = last_daily.date() < now.date()
-            reset_monthly = (last_monthly.month != now.month or 
-                           last_monthly.year != now.year)
+
+            try:
+                # 문자열로 저장된 datetime 처리
+                last_daily = APIUsageTracker._parse_datetime(usage.last_daily_reset)
+                last_monthly = APIUsageTracker._parse_datetime(usage.last_monthly_reset)
+                
+                reset_daily = last_daily.date() < now.date()
+                reset_monthly = (last_monthly.month != now.month or 
+                               last_monthly.year != now.year)
+            except Exception as e:
+                log.error(f"Error parsing datetime in record_usage for user {user_id}: {e}, last_daily_reset type: {type(usage.last_daily_reset)}")
+                # 파싱 실패 시 안전하게 리셋 처리
+                reset_daily = True
+                reset_monthly = True
             
             # 사용량 계산
             new_daily_tokens = total_tokens if reset_daily else usage.daily_tokens + total_tokens
@@ -282,13 +288,21 @@ class APIUsageTracker:
             
             current_usage = []
             for usage in usages:
-                # MySQL->PostgreSQL 마이그레이션 대응: 문자열 datetime 처리
-                last_daily = APIUsageTracker._parse_datetime(usage.last_daily_reset)
-                last_monthly = APIUsageTracker._parse_datetime(usage.last_monthly_reset)
-                
-                daily_reset_needed = last_daily.date() < now.date()
-                monthly_reset_needed = (last_monthly.month != now.month or 
-                                      last_monthly.year != now.year)
+                try:
+                    # MySQL->PostgreSQL 마이그레이션 대응: 문자열 datetime 처리
+                    last_daily = APIUsageTracker._parse_datetime(usage.last_daily_reset)
+                    last_monthly = APIUsageTracker._parse_datetime(usage.last_monthly_reset)
+                    
+                    daily_reset_needed = last_daily.date() < now.date()
+                    monthly_reset_needed = (last_monthly.month != now.month or 
+                                          last_monthly.year != now.year)
+                except Exception as e:
+                    log.error(f"Error parsing datetime for usage {usage.id}: {e}, last_daily_reset type: {type(usage.last_daily_reset)}, value: {usage.last_daily_reset}")
+                    # 파싱 실패 시 기본값으로 리셋 필요로 처리
+                    daily_reset_needed = True
+                    monthly_reset_needed = True
+                    last_daily = now
+                    last_monthly = now
                 
                 current_usage.append({
                     "api_type": usage.api_type,

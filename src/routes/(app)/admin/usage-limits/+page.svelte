@@ -7,11 +7,11 @@
 
     type User = {
         user_id: string;
-	email: string;
         user_name: string;
-        monthly_tokens?: number;
-        monthly_requests?: number;
-        last_activity?: string;
+        // email 제거
+        monthly_tokens?: number | string | null;
+        monthly_requests?: number | string | null;
+        last_activity?: string | null;
     };
 
     let users: User[] = [];
@@ -22,44 +22,52 @@
     let showModal = false;
     let modalPosition = { x: 0, y: 0 };
 
-    // 정렬 상태
-    let sortKey: 'monthly_tokens' | 'monthly_requests' | 'user_name' | 'email' | 'last_activity' | 'user_id' = 'monthly_tokens';
+    // 정렬 상태 (email 키 제거)
+    let sortKey: 'monthly_tokens' | 'monthly_requests' | 'user_name' | 'last_activity' | 'user_id' = 'monthly_tokens';
     let sortOrder: 'asc' | 'desc' = 'desc';
 
     // 페이지네이션 상태
     let page = 1;
     let pageSize = 200;
-    const pageCount = () => Math.max(1, Math.ceil(users.length / pageSize));
-    const pageSlice = () => users.slice((page - 1) * pageSize, page * pageSize);
 
-    function toNumberOrZero(v: any) {
-        const n = typeof v === 'number' ? v : Number(v);
+    // ===== 안전 파서/비교 유틸 =====
+    function toSafeNumber(v: any) {
+        if (v === null || v === undefined) return 0;
+        if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
+        const cleaned = String(v).replace(/,/g, '').trim();
+        const n = Number(cleaned);
         return Number.isFinite(n) ? n : 0;
+    }
+
+    function toSafeTimeMs(s?: string | null) {
+        if (!s) return 0;
+        const iso = s.includes('T') ? s : s.replace(' ', 'T');
+        const t = Date.parse(iso);
+        return Number.isFinite(t) ? t : 0;
     }
 
     function compare(a: User, b: User) {
         if (sortKey === 'monthly_tokens' || sortKey === 'monthly_requests') {
-            const A = toNumberOrZero(a[sortKey]);
-            const B = toNumberOrZero(b[sortKey]);
+            const A = toSafeNumber((a as any)[sortKey]);
+            const B = toSafeNumber((b as any)[sortKey]);
             if (A === B) return 0;
             return sortOrder === 'asc' ? (A > B ? 1 : -1) : (A < B ? 1 : -1);
         }
         if (sortKey === 'last_activity') {
-            const A = a.last_activity ? new Date(a.last_activity).getTime() : 0;
-            const B = b.last_activity ? new Date(b.last_activity).getTime() : 0;
+            const A = toSafeTimeMs(a.last_activity);
+            const B = toSafeTimeMs(b.last_activity);
             if (A === B) return 0;
             return sortOrder === 'asc' ? (A > B ? 1 : -1) : (A < B ? 1 : -1);
         }
-        // 문자열(user_name, user_id)
-        const A = (a[sortKey] ?? '') as string;
-        const B = (b[sortKey] ?? '') as string;
-        if (A === B) return 0;
-        return sortOrder === 'asc' ? (A > B ? 1 : -1) : (A < B ? 1 : -1);
+        const A = ((a as any)[sortKey] ?? '') as string;
+        const B = ((b as any)[sortKey] ?? '') as string;
+        const cmp = A.localeCompare(B, undefined, { sensitivity: 'base' });
+        return sortOrder === 'asc' ? cmp : -cmp;
     }
 
     function applySort() {
         users = users.slice().sort(compare);
-        page = 1;
+        page = 1; // 정렬할 때 첫 페이지로
     }
 
     function setSort(key: typeof sortKey) {
@@ -67,7 +75,6 @@
             sortOrder = sortOrder === 'asc' ? 'desc' : 'asc';
         } else {
             sortKey = key;
-            // 기본 방향: 숫자 desc, 문자열/날짜 asc
             sortOrder = (key === 'monthly_tokens' || key === 'monthly_requests') ? 'desc' : 'asc';
         }
         applySort();
@@ -77,7 +84,14 @@
         loading = true;
         try {
             const res = await getUsersWithUsage(localStorage.token);
-            users = (res?.data?.users ?? []) as User[];
+            users = (res?.data?.users ?? []).map((u: any) => ({
+                // 이메일 제거
+                user_id: u.user_id,
+                user_name: u.user_name,
+                monthly_tokens: toSafeNumber(u.monthly_tokens),
+                monthly_requests: toSafeNumber(u.monthly_requests),
+                last_activity: u.last_activity ?? null,
+            })) as User[];
             sortKey = 'monthly_tokens';
             sortOrder = 'desc';
             applySort();
@@ -91,7 +105,7 @@
         selectedUser = user;
         editing = false;
         try {
-            const res = await getUserLimits(localStorage.token, user.user_id);
+            const res = await getUserLimits(localStorage.token, (user as any).user_id);
             if (!res.success) throw new Error(res.detail || 'Failed to load user limits');
             userLimits = res.data;
 
@@ -117,7 +131,7 @@
     async function saveLimits() {
         try {
             if (!selectedUser) return;
-            await updateUserLimits(localStorage.token, selectedUser.user_id, userLimits);
+            await updateUserLimits(localStorage.token, (selectedUser as any).user_id, userLimits);
             toast.success($i18n.t('Limits saved successfully'));
             editing = false;
         } catch {
@@ -128,7 +142,7 @@
     async function handleResetUsage() {
         if (!selectedUser) return;
         try {
-            const res = await resetUserUsage(selectedUser.user_id, 'all');
+            const res = await resetUserUsage((selectedUser as any).user_id, 'all');
             if (res.success) {
                 alert('사용량이 성공적으로 리셋되었습니다.');
             } else {
@@ -140,12 +154,13 @@
     }
 
     function gotoPrev() { page = Math.max(1, page - 1); }
-    function gotoNext() { page = Math.min(pageCount(), page + 1); }
-    function onChangePageSize(e: Event) {
-        const val = Number((e.target as HTMLSelectElement).value);
-        pageSize = Number.isFinite(val) ? val : 200;
-        page = 1;
-    }
+    function gotoNext() { page = Math.min(totalPages, page + 1); }
+
+    // ===== 반응형 페이지네이션 계산 (페이지네이션 문제 해결 핵심) =====
+    $: totalPages = Math.max(1, Math.ceil(users.length / pageSize));
+    $: start = (page - 1) * pageSize;
+    $: end = page * pageSize;
+    $: paged = users.slice(start, end);
 
     onMount(loadUsers);
 </script>
@@ -171,13 +186,7 @@
                                 {#if sortKey === 'user_name'}{#if sortOrder === 'asc'} ▲ {:else} ▼ {/if}{/if}
                             </th>
 
-                            <th
-                                class="px-6 py-3 text-left text-xs font-large text-gray-500 dark:text-gray-300 uppercase tracking-wider cursor-pointer select-none"
-                                on:click={() => setSort('email')}
-                            >
-                                {$i18n.t('이메일')}
-                                {#if sortKey === 'email'}{#if sortOrder === 'asc'} ▲ {:else} ▼ {/if}{/if}
-                            </th>
+                            <!-- 이메일 열 제거 -->
 
                             <th
                                 class="px-6 py-3 text-left text-xs font-large text-gray-500 dark:text-gray-300 uppercase tracking-wider cursor-pointer select-none"
@@ -210,19 +219,19 @@
                     </thead>
 
                     <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                        {#each pageSlice() as user (user.user_id)}
+                        {#each paged as user (user.user_id)}
                             <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-300">
                                     {user.user_name}
                                 </td>
+
+                                <!-- 이메일 셀 제거 -->
+
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-300">
-                                    {user.email}
+                                    {toSafeNumber(user.monthly_tokens)}
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-300">
-                                    {user.monthly_tokens}
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-300">
-                                    {user.monthly_requests}
+                                    {toSafeNumber(user.monthly_requests)}
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-300">
                                     {user.last_activity ? user.last_activity.slice(0, 19).replace('T', ' ') : ''}
@@ -252,13 +261,13 @@
                 </button>
 
                 <span class="text-sm">
-                    {$i18n.t('페이지')} {page} / {pageCount()}
+                    {$i18n.t('페이지')} {page} / {totalPages}
                 </span>
 
                 <button
                     class="px-3 py-1 border rounded disabled:opacity-50"
                     on:click={gotoNext}
-                    disabled={page === pageCount()}
+                    disabled={page === totalPages}
                 >
                     {$i18n.t('다음')}
                 </button>
@@ -267,9 +276,8 @@
                     <label class="text-sm text-gray-600 dark:text-gray-300">{$i18n.t('페이지 크기')}</label>
                     <select
                         class="border rounded px-2 py-1 text-sm dark:bg-gray-700 dark:border-gray-600"
-                        value={pageSize}
-                        on:change={onChangePageSize}
-                    >
+                        bind:value={pageSize}
+                        on:change={() => { page = 1; }}   >
                         <option value="100">100</option>
                         <option value="200">200</option>
                         <option value="500">500</option>

@@ -14,7 +14,6 @@
 
 자세한 원본 기능 설명 및 설치 방법 등은 원본 프로젝트의 [README](https://github.com/open-webui/open-webui/blob/main/README.md)를 참고하세요.
 
----
 
 ## 라이선스 📜
 
@@ -28,4 +27,4 @@
 
 본 커스터마이징 버전과 관련된 문의사항이나 지원 요청이 있으시면 레포지토리의 이슈를 활용하여 연락해 주세요. 감사합니다! 🤝
 
-현재 open-webui 버전: v0.6.31
+현재 open-webui 버전: v0.6.36

@@ -73,8 +73,11 @@ class HWPProcessor:
             
             from kr.dogfoot.hwplib.reader import HWPReader
             from kr.dogfoot.hwplib.tool.textextractor import TextExtractor
-            from kr.dogfoot.hwplib.tool.textextractor.TextExtractMethod import TextExtractMethod
+            # from kr.dogfoot.hwplib.tool.textextractor.TextExtractMethod import TextExtractMethod
             from java.io import File
+            
+            ## hwp 파싱 오류 수정
+            TextExtractMethod = jpype.JClass('kr.dogfoot.hwplib.tool.textextractor.TextExtractMethod')
             
             java_file = File(file_path)
             hwp_file = HWPReader.fromFile(java_file)

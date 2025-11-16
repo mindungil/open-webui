@@ -765,6 +765,10 @@ async def image_edits(
     form_data: EditImageForm,
     user=Depends(get_verified_user),
 ):
+    log.debug(f"=== Initial form_data.image ===")
+    log.debug(f"Type: {type(form_data.image)}")
+    log.debug(f"Value: {form_data.image}")
+    
     size = None
     width, height = None, None
     if (

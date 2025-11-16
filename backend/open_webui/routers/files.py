@@ -37,7 +37,9 @@ from open_webui.models.knowledge import Knowledges
 
 from open_webui.routers.knowledge import get_knowledge, get_knowledge_list
 from open_webui.routers.retrieval import ProcessFileForm, process_file
-from open_webui.routers.audio import transcribe
+from open_webui.routers.audio import transcribe_original
+from  open_webui.routers.audio import transcribe
+#from open_webui.routers.transcription import transcribe
 from open_webui.storage.provider import Storage
 from open_webui.utils.auth import get_admin_user, get_verified_user
 from pydantic import BaseModel
@@ -102,7 +104,11 @@ def process_uploaded_file(request, file, file_path, file_item, file_metadata, us
                 )
             ):
                 file_path = Storage.get_file(file_path)
-                result = transcribe(request, file_path, file_metadata)
+                result = {}
+                if(file_metadata is None):
+                    result = transcribe_original(request, file_path, file_metadata)
+                else :
+                    result = transcribe(request, file_path, file_metadata)
 
                 process_file(
                     request,
@@ -202,20 +208,17 @@ def upload_file_handler(
         id = str(uuid.uuid4())
         name = filename
         filename = f"{id}_{filename}"
-
-        tags = {
-            "OpenWebUI-User-Email": user.email,
-            "OpenWebUI-User-Id": user.id,
-            "OpenWebUI-User-Name": user.name,
-            "OpenWebUI-File-Id": id,
-        }
-
-        filedata = [id, name, filename, tags]
         contents, file_path = Storage.upload_file(
             file.file,
             filename,
-            tags,
+            {
+                "OpenWebUI-User-Email": user.email,
+                "OpenWebUI-User-Id": user.id,
+                "OpenWebUI-User-Name": user.name,
+                "OpenWebUI-File-Id": id,
+            },
         )
+
         file_item = Files.insert_new_file(
             user.id,
             FileForm(
@@ -237,40 +240,6 @@ def upload_file_handler(
         )
 
         if process:
-            try:
-                if file.content_type:
-                    if file.content_type.startswith("audio/") or file.content_type in {
-                        "video/webm"
-                    }:
-                        file_path = Storage.get_file(file_path)
-                        result = transcribe(request, file_path, file_metadata, filedata)
-
-                        process_file(
-                            request,
-                            ProcessFileForm(file_id=id, content=result.get("text", "")),
-                            user=user,
-                        )
-                    elif (not file.content_type.startswith(("image/", "video/"))) or (
-                        request.app.state.config.CONTENT_EXTRACTION_ENGINE == "external"
-                    ):
-                        process_file(request, ProcessFileForm(file_id=id), user=user)
-                else:
-                    log.info(
-                        f"File type {file.content_type} is not provided, but trying to process anyway"
-                    )
-                    process_file(request, ProcessFileForm(file_id=id), user=user)
-
-                file_item = Files.get_file_by_id(id=id)
-            except Exception as e:
-                log.exception(e)
-                log.error(f"Error processing file: {file_item.id}")
-                file_item = FileModelResponse(
-                    **{
-                        **file_item.model_dump(),
-                        "error": str(e.detail) if hasattr(e, "detail") else str(e),
-                    }
-                )
-                
             if background_tasks and process_in_background:
                 background_tasks.add_task(
                     process_uploaded_file,
@@ -307,6 +276,7 @@ def upload_file_handler(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=ERROR_MESSAGES.DEFAULT("Error uploading file"),
         )
+
 
 
 ############################

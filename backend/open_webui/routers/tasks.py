@@ -744,14 +744,6 @@ async def generate_moa_response(
             content={"detail": str(e)},
         )
 
-
-
-from fastapi import APIRouter, Request, Depends, HTTPException, status
-from fastapi.responses import JSONResponse
-import json
-
-router = APIRouter()
-
 @router.post("/augment-question")
 async def augment_question(
     request: Request, form_data: dict, user=Depends(get_verified_user)

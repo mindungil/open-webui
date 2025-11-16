@@ -96,8 +96,11 @@ from pydub.utils import mediainfo
 def is_audio_conversion_required(file_path):
     """
     Check if the given audio file needs conversion to mp3.
+    백엔드 지원 포맷: flac, m4a, mp3, mp4, mpeg, wav, webm
     """
     SUPPORTED_FORMATS = {"flac", "m4a", "mp3", "mp4", "mpeg", "wav", "webm"}
+    # 추가 코덱 지원 (opus, vorbis는 webm 컨테이너에서 사용)
+    SUPPORTED_CODECS = {"flac", "mp3", "aac", "pcm", "opus", "vorbis"}
 
     if not os.path.isfile(file_path):
         log.error(f"File not found: {file_path}")
@@ -108,28 +111,75 @@ def is_audio_conversion_required(file_path):
         codec_name = info.get("codec_name", "").lower()
         codec_type = info.get("codec_type", "").lower()
         codec_tag_string = info.get("codec_tag_string", "").lower()
+        format_name = info.get("format_name", "").lower()
 
-        if codec_name == "aac" and codec_type == "audio" and codec_tag_string == "mp4a":
-            # File is AAC/mp4a audio, recommend mp3 conversion
+        log.info(f"Audio format detection - File: {os.path.basename(file_path)}, "
+                f"Format: {format_name}, Codec: {codec_name}, Type: {codec_type}")
+
+        # webm, matroska 컨테이너는 항상 변환 (opus 코덱 포함)
+        if any(fmt in format_name for fmt in ["webm", "matroska", "ogg"]):
+            log.info(f"WebM/Matroska/Ogg container detected, conversion required")
             return True
 
-        # If the codec name is in the supported formats
+        # AAC/mp4a는 변환 필요
+        if codec_name == "aac" and codec_type == "audio" and codec_tag_string == "mp4a":
+            log.info(f"AAC/mp4a audio detected, conversion required")
+            return True
+
+        # opus, vorbis 코덱은 항상 변환
+        if codec_name in ["opus", "vorbis"]:
+            log.info(f"Opus/Vorbis codec detected, conversion required")
+            return True
+
+        # 지원되는 포맷이면 변환 불필요
         if codec_name in SUPPORTED_FORMATS:
+            log.info(f"Supported format detected, no conversion needed")
             return False
 
+        # 알 수 없는 포맷은 변환 시도
+        log.warning(f"Unknown format detected, will attempt conversion")
         return True
     except Exception as e:
         log.error(f"Error getting audio format: {e}")
-        return False
+        # 에러 발생 시 안전하게 변환 시도
+        return True
 
 
 def convert_audio_to_mp3(file_path):
-    """Convert audio file to mp3 format."""
+    """
+    Convert audio file to mp3 format with automatic format detection.
+    지원 포맷: webm (opus/vorbis), mp4, m4a, wav, flac, ogg 등
+    """
     try:
         output_path = os.path.splitext(file_path)[0] + ".mp3"
-        audio = AudioSegment.from_file(file_path)
-        audio.export(output_path, format="mp3")
-        log.info(f"Converted {file_path} to {output_path}")
+
+        # pydub가 ffmpeg를 통해 자동으로 포맷 감지하도록 시도
+        try:
+            log.info(f"Attempting automatic format detection for: {file_path}")
+            audio = AudioSegment.from_file(file_path)
+        except Exception as e:
+            log.warning(f"Automatic detection failed: {e}, trying explicit formats")
+
+            # 명시적으로 포맷 지정하여 재시도
+            formats_to_try = ["webm", "mp4", "m4a", "ogg", "wav", "flac"]
+            audio = None
+
+            for fmt in formats_to_try:
+                try:
+                    log.info(f"Trying format: {fmt}")
+                    audio = AudioSegment.from_file(file_path, format=fmt)
+                    log.info(f"Successfully loaded as {fmt}")
+                    break
+                except Exception as fmt_error:
+                    log.debug(f"Format {fmt} failed: {fmt_error}")
+                    continue
+
+            if audio is None:
+                raise Exception("All format attempts failed")
+
+        # MP3로 변환 및 내보내기
+        audio.export(output_path, format="mp3", bitrate="128k")
+        log.info(f"Successfully converted {file_path} to {output_path}")
         return output_path
     except Exception as e:
         log.error(f"Error converting audio file: {e}")
@@ -596,16 +646,48 @@ async def speech(request: Request, user=Depends(get_verified_user)):
         return FileResponse(file_path)
 
 def convert_to_wav(input_path):
+    """
+    Convert audio file to WAV format with automatic format detection.
+    지원: webm (opus/vorbis), mp4, m4a, mp3, flac, ogg 등
+    """
+    try:
+        # pydub/ffmpeg 자동 포맷 감지 시도
         try:
+            log.info(f"WAV 변환 시작 (자동 감지): {input_path}")
             audio = AudioSegment.from_file(input_path)
-            audio = effects.normalize(audio)
-            output_path = os.path.splitext(input_path)[0] + ".wav"
-            audio.export(output_path, format="wav")
-            log.info(f"WAV 변환 완료: {output_path}")
-            return output_path
         except Exception as e:
-            log.error(f"WAV 변환 실패: {str(e)}")
-            raise
+            log.warning(f"자동 감지 실패: {e}, 명시적 포맷 시도")
+
+            # 파일 확장자 기반 포맷 추출
+            ext = os.path.splitext(input_path)[1].lower().replace('.', '')
+            formats_to_try = [ext] if ext else []
+
+            # 일반적인 포맷들도 시도
+            formats_to_try.extend(["webm", "mp4", "m4a", "ogg", "mp3", "wav", "flac"])
+
+            audio = None
+            for fmt in formats_to_try:
+                try:
+                    log.info(f"WAV 변환 시도 (포맷: {fmt})")
+                    audio = AudioSegment.from_file(input_path, format=fmt)
+                    log.info(f"{fmt} 포맷으로 로드 성공")
+                    break
+                except Exception as fmt_error:
+                    log.debug(f"{fmt} 포맷 실패: {fmt_error}")
+                    continue
+
+            if audio is None:
+                raise Exception("모든 포맷 시도 실패")
+
+        # 정규화 및 WAV로 변환
+        audio = effects.normalize(audio)
+        output_path = os.path.splitext(input_path)[0] + ".wav"
+        audio.export(output_path, format="wav")
+        log.info(f"WAV 변환 완료: {output_path}")
+        return output_path
+    except Exception as e:
+        log.error(f"WAV 변환 실패: {str(e)}")
+        raise
 
 # 무음을 기준으로 오디오 분할 (짧은 청크 병합, 긴 청크 슬라이스)
 # --> 적응형 라이브러리 있어서 변경 예정
@@ -694,12 +776,6 @@ def convert_seconds_to_hms(seconds):
 # 전체 진행 함수
 def transcribe_long_audio(request: Request, file_path, model_name='large-v3'):
     try:
-        # GPU 리소스 정리
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            gc.collect()
-            torch.backends.cudnn.benchmark = True
-
         # 오디오 WAV로 변환
         wav_path = convert_to_wav(file_path)
 
@@ -1261,7 +1337,7 @@ def transcription_handler(request, file_path, metadata):
             )
 
 
-def transcribe(request: Request, file_path: str, metadata: Optional[dict] = None):
+def transcribe(request: Request, file_path: str, metadata: Optional[dict] = None, filedata: list = None):
     log.info(f"transcribe: {file_path} {metadata}")
     log.info(f"filedata: {filedata}")
 
@@ -1365,7 +1441,102 @@ def transcribe(request: Request, file_path: str, metadata: Optional[dict] = None
             "error": f"Transcript saved locally, but upload failed: {str(e)}",
         }
 
+def transcribe_original(request: Request, file_path: str, metadata: Optional[dict] = None):
+    log.info(f"transcribe: {file_path} {metadata}")
 
+    if is_audio_conversion_required(file_path):
+        file_path = convert_audio_to_mp3(file_path)
+
+    try:
+        file_path = compress_audio(file_path)
+    except Exception as e:
+        log.exception(e)
+
+    # Always produce a list of chunk paths (could be one entry if small)
+    try:
+        chunk_paths = split_audio(file_path, MAX_FILE_SIZE)
+        print(f"Chunk paths: {chunk_paths}")
+    except Exception as e:
+        log.exception(e)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=ERROR_MESSAGES.DEFAULT(e),
+        )
+
+    results = []
+    try:
+        with ThreadPoolExecutor() as executor:
+            # Submit tasks for each chunk_path
+            futures = [
+                executor.submit(transcription_handler, request, chunk_path, metadata)
+                for chunk_path in chunk_paths
+            ]
+            # Gather results as they complete
+            for future in futures:
+                try:
+                    results.append(future.result())
+                except Exception as transcribe_exc:
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail=f"Error transcribing chunk: {transcribe_exc}",
+                    )
+    finally:
+        # Clean up only the temporary chunks, never the original file
+        for chunk_path in chunk_paths:
+            if chunk_path != file_path and os.path.isfile(chunk_path):
+                try:
+                    os.remove(chunk_path)
+                except Exception:
+                    pass
+
+    return {
+        "text": " ".join([result["text"] for result in results]),
+    }
+    
+def compress_audio(file_path):
+    """
+    Compress audio file with automatic format detection.
+    지원: webm, mp4, m4a, wav, mp3, flac, ogg 등
+    """
+    if os.path.getsize(file_path) > MAX_FILE_SIZE:
+        id = os.path.splitext(os.path.basename(file_path))[0]
+        file_dir = os.path.dirname(file_path)
+
+        # 자동 포맷 감지로 파일 로드
+        try:
+            log.info(f"Compressing audio (auto-detect): {file_path}")
+            audio = AudioSegment.from_file(file_path)
+        except Exception as e:
+            log.warning(f"Auto-detect failed in compress: {e}, trying explicit formats")
+
+            # 파일 확장자 추출
+            ext = os.path.splitext(file_path)[1].lower().replace('.', '')
+            formats_to_try = [ext] if ext else []
+            formats_to_try.extend(["webm", "mp4", "m4a", "ogg", "mp3", "wav", "flac"])
+
+            audio = None
+            for fmt in formats_to_try:
+                try:
+                    log.info(f"Trying compress with format: {fmt}")
+                    audio = AudioSegment.from_file(file_path, format=fmt)
+                    log.info(f"Successfully loaded as {fmt} for compression")
+                    break
+                except Exception as fmt_error:
+                    log.debug(f"Format {fmt} failed in compress: {fmt_error}")
+                    continue
+
+            if audio is None:
+                raise Exception("All format attempts failed in compress_audio")
+
+        # 오디오 압축
+        audio = audio.set_frame_rate(16000).set_channels(1)
+        compressed_path = os.path.join(file_dir, f"{id}_compressed.mp3")
+        audio.export(compressed_path, format="mp3", bitrate="32k")
+        log.info(f"Compressed audio to {compressed_path}")
+
+        return compressed_path
+    else:
+        return file_path
 
 @router.post("/transcriptions")
 def transcription(

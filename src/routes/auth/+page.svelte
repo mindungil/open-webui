@@ -223,12 +223,8 @@
 					</div>
 				{:else}
 					<div class="  my-auto pb-10 w-full dark:text-gray-100">
-						<form
+						<div
 							class=" flex flex-col justify-center"
-							on:submit={(e) => {
-								e.preventDefault();
-								submitHandler();
-							}}
 						>
 							<div class="mb-1 flex flex-col items-center">
 								<img src="static/jblogo.png" alt="전북특별자치도 로고" class="mx-auto mb-6 w-128 h-32 object-contain" />
@@ -255,12 +251,8 @@
 								{/if}
 							</div>
 								
-							<form
+							<div
 								class=" flex flex-col justify-center"
-								on:submit={(e) => {
-									e.preventDefault();
-									submitHandler();
-								}}
 							>
 								<div class="mb-1">
 									<div class=" text-2xl font-medium">
@@ -380,14 +372,16 @@
 										{#if mode === 'ldap'}
 											<button
 												class="bg-gray-700/5 hover:bg-gray-700/10 dark:bg-gray-100/5 dark:hover:bg-gray-100/10 dark:text-gray-300 dark:hover:text-white transition w-full rounded-full font-medium text-sm py-2.5"
-												type="submit"
+												type="button"
+												on:click={submitHandler}
 											>
 												{$i18n.t('Authenticate')}
 											</button>
 										{:else}
 											<button
 												class="bg-gray-700/5 hover:bg-gray-700/10 dark:bg-gray-100/5 dark:hover:bg-gray-100/10 dark:text-gray-300 dark:hover:text-white transition w-full rounded-full font-medium text-sm py-2.5"
-												type="submit"
+												type="button"
+												on:click={submitHandler}
 											>
 												{mode === 'signin'
 													? $i18n.t('Sign in')
@@ -420,7 +414,7 @@
 										{/if}
 									{/if}
 								</div>
-							</form>
+							</div>
 
 							{#if Object.keys($config?.oauth?.providers ?? {}).length > 0}
 								<div class="inline-flex items-center justify-center w-full">
@@ -575,7 +569,7 @@
 									</button>
 								</div>
 							{/if}
-						</form>
+						</div>
 						{#if $config?.metadata?.login_footer}
 							<div class="max-w-3xl mx-auto">
 								<div class="mt-2 text-[0.7rem] text-gray-500 dark:text-gray-400 marked">
@@ -603,5 +597,5 @@
 				</div>
 			</div>
 		{/if}
-	{/if}
+	{/if}ß
 </div>

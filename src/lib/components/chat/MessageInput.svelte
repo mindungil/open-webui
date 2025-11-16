@@ -1505,278 +1505,120 @@
 										</div>
 									</InputMenu>
 
-									{#if showWebSearchButton || showImageGenerationButton || showCodeInterpreterButton || showToolsButton || (toggleFilters && toggleFilters.length > 0)}
-										<div
-											class="flex self-center w-[1px] h-4 mx-1 bg-gray-200/50 dark:bg-gray-800/50"
-										/>
+									<div
+										class="flex self-center w-[1px] h-4 mx-1 bg-gray-200/50 dark:bg-gray-800/50"
+									/>
 
-										<IntegrationsMenu
-											selectedModels={atSelectedModel ? [atSelectedModel.id] : selectedModels}
-											{toggleFilters}
-											{showWebSearchButton}
-											{showImageGenerationButton}
-											{showCodeInterpreterButton}
-											bind:selectedToolIds
-											bind:selectedFilterIds
-											bind:webSearchEnabled
-											bind:imageGenerationEnabled
-											bind:codeInterpreterEnabled
-											closeOnOutsideClick={integrationsMenuCloseOnOutsideClick}
-											onShowValves={(e) => {
-												const { type, id } = e;
-												selectedValvesType = type;
-												selectedValvesItemId = id;
-												showValvesModal = true;
-												integrationsMenuCloseOnOutsideClick = false;
-											}}
-											onClose={async () => {
-												await tick();
-
-												const chatInput = document.getElementById('chat-input');
-												chatInput?.focus();
-											}}
-										>
-											<div
-												id="integration-menu-button"
-												class="bg-transparent hover:bg-gray-100 text-gray-700 dark:text-white dark:hover:bg-gray-800 rounded-full size-8 flex justify-center items-center outline-hidden focus:outline-hidden"
-											>
-												<Component className="size-4.5" strokeWidth="1.5" />
-											</div>
-										</InputMenu>
-
-										{#if $_user && (showToolsButton || (toggleFilters && toggleFilters.length > 0) || showWebSearchButton || showImageGenerationButton || showCodeInterpreterButton)}
-											<div
-												class="flex self-center w-[1px] h-4 mx-1.5 bg-gray-50 dark:bg-gray-800"
-											/>
-										
-											<div class="flex gap-1 items-center overflow-x-auto scrollbar-none flex-1">
-												<!-- {#if showToolsButton}
-													<Tooltip
-														content={$i18n.t('{{COUNT}} Available Tools', {
-															COUNT: toolServers.length + selectedToolIds.length
-														})}
-										<div
-											class="flex self-center w-[1px] h-4 mx-1 bg-gray-200/50 dark:bg-gray-800/50"
-										/>
-
-										{#if showWebSearchButton || showImageGenerationButton || showCodeInterpreterButton || showToolsButton || (toggleFilters && toggleFilters.length > 0)}
-											<IntegrationsMenu
-												selectedModels={atSelectedModel ? [atSelectedModel.id] : selectedModels}
-												{toggleFilters}
-												{showWebSearchButton}
-												{showImageGenerationButton}
-												{showCodeInterpreterButton}
-												bind:selectedToolIds
-												bind:selectedFilterIds
-												bind:webSearchEnabled
-												bind:imageGenerationEnabled
-												bind:codeInterpreterEnabled
-												closeOnOutsideClick={integrationsMenuCloseOnOutsideClick}
-												onShowValves={(e) => {
-													const { type, id } = e;
-													selectedValvesType = type;
-													selectedValvesItemId = id;
-													showValvesModal = true;
-													integrationsMenuCloseOnOutsideClick = false;
-												}}
-												onClose={async () => {
-													await tick();
-
-													const chatInput = document.getElementById('chat-input');
-													chatInput?.focus();
-												}}
-											>
-												<div
-													id="integration-menu-button"
-													class="bg-transparent hover:bg-gray-100 text-gray-700 dark:text-white dark:hover:bg-gray-800 rounded-full size-8 flex justify-center items-center outline-hidden focus:outline-hidden"
+									<div class="flex gap-1 items-center overflow-x-auto scrollbar-none flex-1">
+											<Tooltip content={'AI를 통한 질문 구체화'} placement="top">
+												<button
+													on:click|preventDefault={handleQuestionAugmentation}
+													type="button"
+													class="px-2 @xl:px-2.5 py-2 flex gap-1.5 items-center text-sm rounded-full transition-colors duration-300 focus:outline-hidden max-w-full overflow-hidden hover:bg-gray-50 dark:hover:bg-gray-800 bg-transparent text-gray-600 dark:text-gray-300"
 												>
-													<Component className="size-4.5" strokeWidth="1.5" />
-												</div>
-											</IntegrationsMenu>
-										{/if}
-
-										{#if selectedModelIds.length === 1 && $models.find((m) => m.id === selectedModelIds[0])?.has_user_valves}
-											<div class="ml-1 flex gap-1.5">
-												<Tooltip content={$i18n.t('Valves')} placement="top">
+													<LightBulb className="size-4" strokeWidth="1.75" />
+													<span class="hidden @xl:block whitespace-nowrap overflow-hidden text-ellipsis leading-none pr-0.5">
+														질문 증강
+													</span>
+												</button>
+											</Tooltip>
+											{#each toggleFilters as filter, filterIdx (filter.id)}
+												<Tooltip content={filter?.description} placement="top">
 													<button
-														id="model-valves-button"
-														class="bg-transparent hover:bg-gray-100 text-gray-700 dark:text-white dark:hover:bg-gray-800 rounded-full size-8 flex justify-center items-center outline-hidden focus:outline-hidden"
-														on:click={() => {
-															selectedValvesType = 'function';
-															selectedValvesItemId = selectedModelIds[0]?.split('.')[0];
-															showValvesModal = true;
+														on:click|preventDefault={() => {
+															if (selectedFilterIds.includes(filter.id)) {
+																selectedFilterIds = selectedFilterIds.filter(
+																	(id) => id !== filter.id
+																);
+															} else {
+																selectedFilterIds = [...selectedFilterIds, filter.id];
+															}
 														}}
-													>
-														<button
-															class="translate-y-[0.5px] flex gap-1 items-center text-gray-600 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-200 rounded-lg p-1 self-center transition"
-															aria-label="Available Tools"
-															type="button"
-															on:click={() => {
-																showTools = !showTools;
-															}}
-														>
-															<Wrench className="size-4" strokeWidth="1.75" />
-
-															<span class="text-sm font-medium text-gray-600 dark:text-gray-300">
-																{toolServers.length + selectedToolIds.length}
-															</span>
-														</button>
-													</Tooltip>
-												{/if} -->
-												<Tooltip content={$i18n.t('AI를 통한 질문 구체화')} placement="top">
-													<button
-														on:click|preventDefault={handleQuestionAugmentation}
 														type="button"
-														class="px-2 @xl:px-2.5 py-2 flex gap-1.5 items-center text-sm rounded-full transition-colors duration-300 focus:outline-hidden max-w-full overflow-hidden hover:bg-gray-50 dark:hover:bg-gray-800 bg-transparent text-gray-600 dark:text-gray-300"
+														class="px-2 @xl:px-2.5 py-2 flex gap-1.5 items-center text-sm rounded-full transition-colors duration-300 focus:outline-hidden max-w-full overflow-hidden hover:bg-gray-50 dark:hover:bg-gray-800 {selectedFilterIds.includes(
+															filter.id
+														)
+															? 'text-sky-500 dark:text-sky-300 bg-sky-50 dark:bg-sky-200/5'
+															: 'bg-transparent text-gray-600 dark:text-gray-300  '} capitalize"
 													>
-														<LightBulb className="size-4" strokeWidth="1.75" />
-														<span class="hidden @xl:block whitespace-nowrap overflow-hidden text-ellipsis leading-none pr-0.5">
-															{$i18n.t('질문 증강')}
-														</span>
+														{#if filter?.icon}
+															<div class="size-4 items-center flex justify-center">
+																<img
+																	src={filter.icon}
+																	class="size-3.5 {filter.icon.includes('svg')
+																		? 'dark:invert-[80%]'
+																		: ''}"
+																	style="fill: currentColor;"
+																	alt={filter.name}																		/>
+															</div>
+														{:else}
+															<Sparkles className="size-4" strokeWidth="1.75" />
+														{/if}
+														<span
+															class="hidden @xl:block whitespace-nowrap overflow-hidden text-ellipsis leading-none pr-0.5"
+															>{filter?.name}</span
+														>
 													</button>
 												</Tooltip>
-												{#each toggleFilters as filter, filterIdx (filter.id)}
-													<Tooltip content={filter?.description} placement="top">
-														<button
-															on:click|preventDefault={() => {
-																if (selectedFilterIds.includes(filter.id)) {
-																	selectedFilterIds = selectedFilterIds.filter(
-																		(id) => id !== filter.id
-																	);
-																} else {
-																	selectedFilterIds = [...selectedFilterIds, filter.id];
-																}
-															}}
-															type="button"
-															class="px-2 @xl:px-2.5 py-2 flex gap-1.5 items-center text-sm rounded-full transition-colors duration-300 focus:outline-hidden max-w-full overflow-hidden hover:bg-gray-50 dark:hover:bg-gray-800 {selectedFilterIds.includes(
-																filter.id
-															)
-																? 'text-sky-500 dark:text-sky-300 bg-sky-50 dark:bg-sky-200/5'
-																: 'bg-transparent text-gray-600 dark:text-gray-300  '} capitalize"
+											{/each}
+											{#if showWebSearchButton}
+												<Tooltip content={$i18n.t('Search the internet')} placement="top">
+													<button
+														on:click|preventDefault={() => (webSearchEnabled = !webSearchEnabled)}
+														type="button"
+														class="px-2 @xl:px-2.5 py-2 flex gap-1.5 items-center text-sm rounded-full transition-colors duration-300 focus:outline-hidden max-w-full overflow-hidden hover:bg-gray-50 dark:hover:bg-gray-800 {webSearchEnabled ||
+														($settings?.webSearch ?? false) === 'always'
+															? ' text-sky-500 dark:text-sky-300 bg-sky-50 dark:bg-sky-200/5'
+															: 'bg-transparent text-gray-600 dark:text-gray-300 '}"
+													>
+														<GlobeAlt className="size-4" strokeWidth="1.75" />
+														<span
+															class="hidden @xl:block whitespace-nowrap overflow-hidden text-ellipsis leading-none pr-0.5"																	>{$i18n.t('Web Search')}</span
 														>
-															{#if filter?.icon}
-																<div class="size-4 items-center flex justify-center">
-																	<img
-																		src={filter.icon}
-																		class="size-3.5 {filter.icon.includes('svg')
-																			? 'dark:invert-[80%]'
-																			: ''}"
-																		style="fill: currentColor;"
-																		alt={filter.name}
-																	/>
-																</div>
-															{:else}
-																<Sparkles className="size-4" strokeWidth="1.75" />
-															{/if}
-															<span
-																class="hidden @xl:block whitespace-nowrap overflow-hidden text-ellipsis leading-none pr-0.5"
-																>{filter?.name}</span
-															>
-														</button>
-													</Tooltip>
-												{/each}
-
-												{#if showWebSearchButton}
-													<Tooltip content={$i18n.t('Search the internet')} placement="top">
-														<button
-															on:click|preventDefault={() => (webSearchEnabled = !webSearchEnabled)}
-															type="button"
-															class="px-2 @xl:px-2.5 py-2 flex gap-1.5 items-center text-sm rounded-full transition-colors duration-300 focus:outline-hidden max-w-full overflow-hidden hover:bg-gray-50 dark:hover:bg-gray-800 {webSearchEnabled ||
-															($settings?.webSearch ?? false) === 'always'
-																? ' text-sky-500 dark:text-sky-300 bg-sky-50 dark:bg-sky-200/5'
-																: 'bg-transparent text-gray-600 dark:text-gray-300 '}"
+													</button>
+												</Tooltip>
+											{/if}
+											{#if showImageGenerationButton}
+												<Tooltip content={$i18n.t('Generate an image')} placement="top">
+													<button
+														on:click|preventDefault={() =>
+															(imageGenerationEnabled = !imageGenerationEnabled)}
+														type="button"
+														class="px-2 @xl:px-2.5 py-2 flex gap-1.5 items-center text-sm rounded-full transition-colors duration-300 focus:outline-hidden max-w-full overflow-hidden hover:bg-gray-50 dark:hover:bg-gray-800 {imageGenerationEnabled
+															? ' text-sky-500 dark:text-sky-300 bg-sky-50 dark:bg-sky-200/5'
+															: 'bg-transparent text-gray-600 dark:text-gray-300 '}"
+													>
+														<Photo className="size-4" strokeWidth="1.75" />
+														<span
+															class="hidden @xl:block whitespace-nowrap overflow-hidden text-ellipsis leading-none pr-0.5"
+															>{$i18n.t('Image')}</span
 														>
-															<GlobeAlt className="size-4" strokeWidth="1.75" />
-															<span
-																class="hidden @xl:block whitespace-nowrap overflow-hidden text-ellipsis leading-none pr-0.5"
-																>{$i18n.t('Web Search')}</span
-															>
-														</button>
-													</Tooltip>
-												{/if}
-
-												{#if showImageGenerationButton}
-													<Tooltip content={$i18n.t('Generate an image')} placement="top">
-														<button
-															on:click|preventDefault={() =>
-																(imageGenerationEnabled = !imageGenerationEnabled)}
-															type="button"
-															class="px-2 @xl:px-2.5 py-2 flex gap-1.5 items-center text-sm rounded-full transition-colors duration-300 focus:outline-hidden max-w-full overflow-hidden hover:bg-gray-50 dark:hover:bg-gray-800 {imageGenerationEnabled
-																? ' text-sky-500 dark:text-sky-300 bg-sky-50 dark:bg-sky-200/5'
-																: 'bg-transparent text-gray-600 dark:text-gray-300 '}"
-														>
-															<Photo className="size-4" strokeWidth="1.75" />
-															<span
-																class="hidden @xl:block whitespace-nowrap overflow-hidden text-ellipsis leading-none pr-0.5"
-																>{$i18n.t('Image')}</span
-															>
-														</button>
-													</Tooltip>
-												{/if}
-
-												{#if showCodeInterpreterButton}
-													<Tooltip content={$i18n.t('Execute code for analysis')} placement="top">
-														<button
-															on:click|preventDefault={() =>
-																(codeInterpreterEnabled = !codeInterpreterEnabled)}
-															type="button"
+													</button>
+												</Tooltip>
+											{/if}
+											{#if showCodeInterpreterButton}
+												<Tooltip content={$i18n.t('Execute code for analysis')} placement="top">
+													<button
+														on:click|preventDefault={() =>
+															(codeInterpreterEnabled = !codeInterpreterEnabled)}
+														type="button"
 															class="px-2 @xl:px-2.5 py-2 flex gap-1.5 items-center text-sm rounded-full transition-colors duration-300 focus:outline-hidden max-w-full overflow-hidden hover:bg-gray-50 dark:hover:bg-gray-800 {codeInterpreterEnabled
-																? ' text-sky-500 dark:text-sky-300 bg-sky-50 dark:bg-sky-200/5'
-																: 'bg-transparent text-gray-600 dark:text-gray-300 '}"
+															? ' text-sky-500 dark:text-sky-300 bg-sky-50 dark:bg-sky-200/5'
+															: 'bg-transparent text-gray-600 dark:text-gray-300 '}"
+													>
+														<CommandLine className="size-4" strokeWidth="1.75" />
+														<span
+															class="hidden @xl:block whitespace-nowrap overflow-hidden text-ellipsis leading-none pr-0.5"
+															>{$i18n.t('Code Interpreter')}</span
 														>
-															<CommandLine className="size-4" strokeWidth="1.75" />
-															<span
-																class="hidden @xl:block whitespace-nowrap overflow-hidden text-ellipsis leading-none pr-0.5"
-																>{$i18n.t('Code Interpreter')}</span
-															>
-														</button>
-													</Tooltip>
-												{/if}
-											</div>
-										{/if}
+													</button>
+												</Tooltip>
+											{/if}
 									</div>
 
 									<div class="self-end flex space-x-1 mr-1 shrink-0 overflow-x-auto scrollbar-none flex-nowrap">
 										<UsageIndicator className="shrink-0 min-w-0 max-w-[120px] truncate" />
-										{#if (!history?.currentId || history.messages[history.currentId]?.done == true) && ($_user?.role === 'admin' || ($_user?.permissions?.chat?.stt ?? true))}
-											<!-- {$i18n.t('Record voice')} -->
-											<Tooltip content={$i18n.t('Dictate')}>
-												<button
-													id="voice-input-button"
-													class=" text-gray-600 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-200 transition rounded-full p-1.5 mr-0.5 self-center shrink-0"
-													type="button"
-													on:click={async () => {
-														try {
-															let stream = await navigator.mediaDevices
-																.getUserMedia({ audio: true })
-																.catch(function (err) {
-																	toast.error(
-																		$i18n.t(
-																			`Permission denied when accessing microphone: {{error}}`,
-																			{
-																				error: err
-																			}
-																		)
-																	);
-																	return null;
-																});
-
-															if (stream) {
-																recording = true;
-																const tracks = stream.getTracks();
-																tracks.forEach((track) => track.stop());
-															}
-															stream = null;
-														} catch {
-															toast.error($i18n.t('Permission denied when accessing microphone'));
-														}
-													}}
-												>
-													<Knobs className="size-4" strokeWidth="1.5" />
-												</button>
-											</Tooltip>
-										</div>
-									{/if}
+									</div>
 
 									<div class="ml-1 flex gap-1.5">
 										{#if (selectedToolIds ?? []).length > 0}
@@ -1902,9 +1744,9 @@
 										{/if}
 									</div>
 								</div>
-
+								
 								<div class="self-end flex space-x-1 mr-1 shrink-0">
-									{#if (!history?.currentId || history.messages[history.currentId]?.done == true) && ($_user?.role === 'admin' || ($_user?.permissions?.chat?.stt ?? true))}
+									{#if (!history?.currentId || history.messages[history.currentId]?.done == true) || ($_user?.role === 'admin' || ($_user?.permissions?.chat?.stt ?? true))}
 										<!-- {$i18n.t('Record voice')} -->
 										<Tooltip content={$i18n.t('Dictate')}>
 											<button

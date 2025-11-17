@@ -53,6 +53,7 @@
 	import InputMenu from './MessageInput/InputMenu.svelte';
 	import VoiceRecording from './MessageInput/VoiceRecording.svelte';
 	import FilesOverlay from './MessageInput/FilesOverlay.svelte';
+	import AudioFileLinks from './MessageInput/AudioFileLinks.svelte';
 	import ToolServersModal from './ToolServersModal.svelte';
 
 	import RichTextInput from '../common/RichTextInput.svelte';
@@ -1093,9 +1094,14 @@
 								document.getElementById('chat-input')?.focus();
 							}}
 							onConfirm={async (data) => {
-								const { text, filename } = data;
+								const { text, filename, file, blob } = data;
 
 								recording = false;
+
+								// Upload the recorded audio file if available
+								if (file && blob) {
+									await uploadFileHandler(file);
+								}
 
 								await tick();
 								await insertTextAtCursor(`${text}`);
@@ -1224,25 +1230,28 @@
 												</div>
 											</div>
 										{:else}
-											<FileItem
-												item={file}
-												name={file.name}
-												type={file.type}
-												size={file?.size}
-												loading={file.status === 'uploading'}
-												dismissible={true}
-												edit={true}
-												small={true}
-												modal={['file', 'collection'].includes(file?.type)}
-												on:dismiss={async () => {
-													// Remove from UI state
-													files.splice(fileIdx, 1);
-													files = files;
-												}}
-												on:click={() => {
-													console.log(file);
-												}}
-											/>
+											<div class="flex flex-col">
+												<FileItem
+													item={file}
+													name={file.name}
+													type={file.type}
+													size={file?.size}
+													loading={file.status === 'uploading'}
+													dismissible={true}
+													edit={true}
+													small={true}
+													modal={['file', 'collection'].includes(file?.type)}
+													on:dismiss={async () => {
+														// Remove from UI state
+														files.splice(fileIdx, 1);
+														files = files;
+													}}
+													on:click={() => {
+														console.log(file);
+													}}
+												/>
+												<AudioFileLinks {file} />
+											</div>
 										{/if}
 									{/each}
 								</div>

@@ -1345,6 +1345,9 @@ def transcribe(request: Request, file_path: str, metadata: Optional[dict] = None
     plain_text = result['plain_text']
     docx_doc = result['docx_document']
     segments = result['segments']
+    
+    log.info(f"Transcription result length: {len(plain_text)} characters")
+    log.info(f"Number of segments: {len(segments)}")
 
     try:
         # 1. 기존 txt 파일 저장 (변경 없음)
@@ -1575,6 +1578,18 @@ def transcription(
         file_dir = f"{CACHE_DIR}/audio/transcriptions"
         os.makedirs(file_dir, exist_ok=True)
         file_path = f"{file_dir}/{filename}"
+        
+        # filedata를 구현해야함 -> 이전 버전과 로직이 분리됨
+        unsanitized_filename = file.filename
+        stt_name = os.path.basename(unsanitized_filename)
+        stt_filename = f"{id}_{filename}"
+        tags ={
+                "OpenWebUI-User-Email": user.email,
+                "OpenWebUI-User-Id": user.id,
+                "OpenWebUI-User-Name": user.name,
+                "OpenWebUI-File-Id": id,
+        }
+        filedata = [str(id), stt_name, stt_filename, tags]
 
         with open(file_path, "wb") as f:
             f.write(contents)
@@ -1585,7 +1600,7 @@ def transcription(
             if language:
                 metadata = {"language": language}
 
-            result = transcribe(request, file_path, metadata)
+            result = transcribe(request, file_path, metadata, filedata)
 
             return {
                 **result,

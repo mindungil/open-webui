@@ -33,6 +33,8 @@ from open_webui.retrieval.loaders.mineru import MinerULoader
 
 from open_webui.env import SRC_LOG_LEVELS, GLOBAL_LOG_LEVEL
 
+from open_webui.retrieval.loaders.chandra_loader import ChandraLoader
+
 logging.basicConfig(stream=sys.stdout, level=GLOBAL_LOG_LEVEL)
 log = logging.getLogger(__name__)
 log.setLevel(SRC_LOG_LEVELS["RAG"])
@@ -395,12 +397,12 @@ class Loader:
             )
         else:
             if file_ext == "pdf":
-                # from open_webui.retrieval.loaders.chandra_loader import ChandraLoader
-                # loader = ChandraLoader(
-                #     file_path, 
+                # loader = PyPDFLoader(
+                #     file_path, extract_images=self.kwargs.get("PDF_EXTRACT_IMAGES")
                 # )
-                loader = PyPDFLoader(
-                    file_path, extract_images=self.kwargs.get("PDF_EXTRACT_IMAGES")
+                loader = ChandraLoader(
+                    file_path,
+                    server_url="http://192.168.0.201:30040" 
                 )
             elif file_ext == "csv":
                 loader = CSVLoader(file_path, autodetect_encoding=True)

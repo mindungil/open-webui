@@ -87,7 +87,7 @@ def has_access_to_file(
 ############################
 
 
-def process_uploaded_file(request, file, file_path, file_item, file_metadata, user):
+def process_uploaded_file(request, file, file_path, file_item, file_metadata, user, filedata):
     try:
         if file.content_type:
             stt_supported_content_types = getattr(
@@ -106,9 +106,11 @@ def process_uploaded_file(request, file, file_path, file_item, file_metadata, us
                 file_path = Storage.get_file(file_path)
                 result = {}
                 if(file_metadata is None):
+                    log.info("file_metadata is None: 오리지널 버전 호출")
                     result = transcribe_original(request, file_path, file_metadata)
                 else :
-                    result = transcribe(request, file_path, file_metadata)
+                    log.info("file_metadata is not None: 회의록 버전 호출")
+                    result = transcribe(request, file_path, file_metadata, filedata)
 
                 process_file(
                     request,
@@ -208,6 +210,14 @@ def upload_file_handler(
         id = str(uuid.uuid4())
         name = filename
         filename = f"{id}_{filename}"
+        
+        tags ={
+                "OpenWebUI-User-Email": user.email,
+                "OpenWebUI-User-Id": user.id,
+                "OpenWebUI-User-Name": user.name,
+                "OpenWebUI-File-Id": id,
+        }
+        
         contents, file_path = Storage.upload_file(
             file.file,
             filename,
@@ -219,6 +229,8 @@ def upload_file_handler(
             },
         )
 
+        filedata = [id, name, filename, tags]
+        
         file_item = Files.insert_new_file(
             user.id,
             FileForm(
@@ -249,6 +261,7 @@ def upload_file_handler(
                     file_item,
                     file_metadata,
                     user,
+                    filedata,
                 )
                 return {"status": True, **file_item.model_dump()}
             else:

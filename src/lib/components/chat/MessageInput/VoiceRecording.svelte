@@ -166,7 +166,11 @@
 
 			if (res) {
 				console.log(res);
-				onConfirm(res);
+				onConfirm({
+					...res,
+					file: file,
+					blob: audioBlob
+				});
 			}
 		} else {
 			onConfirm({

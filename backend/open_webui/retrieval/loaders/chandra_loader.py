@@ -59,7 +59,7 @@ class ChandraLoader:
         # 서버 URL 설정
         self.server_url = server_url or os.getenv(
             "CHANDRA_SERVER_URL",
-            "http://192.168.0.201:30030"
+            "http://localhost:8000"
         )
         
         # 파일 존재 확인
@@ -94,19 +94,20 @@ class ChandraLoader:
             )
     
     def _send_ocr_request(self) -> dict:
-        """서버에 OCR 요청 전송"""
-        url = f"{self.server_url}/ocr"
-        
+        """서버에 OCR 요청 전송 - LangChain 형식"""
+        url = f"{self.server_url}/ocr/langchain"
+
         print(f"Uploading PDF to server: {self.file_path}")
-        
+
         with open(self.file_path, "rb") as f:
             files = {
                 "file": (Path(self.file_path).name, f, "application/pdf")
             }
             params = {
-                "dpi": self.dpi
+                "dpi": self.dpi,
+                "source": self.file_path  # 메타데이터에 원본 경로 포함
             }
-            
+
             try:
                 response = requests.post(
                     url,
@@ -115,9 +116,9 @@ class ChandraLoader:
                     timeout=self.timeout
                 )
                 response.raise_for_status()
-                
+
                 return response.json()
-                
+
             except requests.exceptions.Timeout:
                 raise TimeoutError(
                     f"OCR request timed out after {self.timeout} seconds.\n"
@@ -135,43 +136,31 @@ class ChandraLoader:
         """
         PDF를 로드하고 OCR 수행
         LangChain Document 객체 리스트 반환
-        
+
         Returns:
             List[Document]: LangChain Document 객체 리스트
         """
-        # 서버에 OCR 요청
+        # 서버에 OCR 요청 (LangChain 형식으로)
         result = self._send_ocr_request()
-        
+
         if not result["success"]:
             raise RuntimeError(
                 f"OCR processing failed: {result.get('error', 'Unknown error')}"
             )
-        
-        # Document 객체로 변환
+
+        # 서버에서 이미 LangChain Document 형식으로 반환
         documents = []
         total_pages = result["total_pages"]
-        
+
         print(f"Processing {total_pages} pages...")
-        
-        for page_data in tqdm(result["pages"], desc="Converting to Documents"):
-            page_num = page_data["page"]
-            
+
+        for doc_data in tqdm(result["documents"], desc="Converting to Documents"):
             doc = Document(
-                page_content=page_data["content"],
-                metadata={
-                    "source": self.file_path,
-                    "page": page_num,
-                    "total_pages": total_pages,
-                    "success": page_data["success"],
-                    "gpu_id": page_data.get("gpu_id")
-                }
+                page_content=doc_data["page_content"],
+                metadata=doc_data["metadata"]
             )
-            
-            if not page_data["success"]:
-                doc.metadata["error"] = page_data.get("error")
-            
             documents.append(doc)
-        
+
         print(f"Successfully loaded {len(documents)} pages")
         return documents
     

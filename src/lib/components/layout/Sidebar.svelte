@@ -886,6 +886,9 @@
 							</a>
 						</div>
 					{/if}
+					<!-- 여기에 GPTs 구현하기 -->
+					
+					<!-- -->
 				</div>
 
 				{#if ($models ?? []).length > 0 && ($settings?.pinnedModels ?? []).length > 0}

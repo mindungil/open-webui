@@ -33,7 +33,7 @@ from open_webui.retrieval.loaders.mineru import MinerULoader
 
 from open_webui.env import SRC_LOG_LEVELS, GLOBAL_LOG_LEVEL
 
-from open_webui.retrieval.loaders.chandra_loader import ChandraLoader
+from open_webui.retrieval.loaders.deepseek_ocr_loader import DeepSeekOCRLoader
 
 logging.basicConfig(stream=sys.stdout, level=GLOBAL_LOG_LEVEL)
 log = logging.getLogger(__name__)
@@ -400,10 +400,23 @@ class Loader:
                 # loader = PyPDFLoader(
                 #     file_path, extract_images=self.kwargs.get("PDF_EXTRACT_IMAGES")
                 # )
-                loader = ChandraLoader(
+                loader = DeepSeekOCRLoader(
                     file_path,
-                    server_url="http://192.168.0.201:30040" 
+                    extract_images=True,
+                    ocr_server_url="http://220.124.155.35:30100"
                 )
+                # loader = ChandraLoader(
+                #     file_path,
+                #     server_url="http://192.168.0.201:30040" 
+                # )
+                # loader = DeepSeekOCRLoader(
+                #     file_path,             # OCR할 PDF 경로
+                #     api_base_url="http://192.168.0.201:30040/v1",  # DeepSeek-OCR 서버 주소
+                #     api_key="EMPTY",                      # 필요 시 API 키
+                #     timeout=3600,                         # 요청 타임아웃(초)
+                #     dpi=200                               # PDF → 이미지 변환 해상도
+                # )
+
             elif file_ext == "csv":
                 loader = CSVLoader(file_path, autodetect_encoding=True)
             elif file_ext == "rst":

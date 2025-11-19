@@ -49,7 +49,7 @@
 
 	import { WEBUI_BASE_URL, WEBUI_API_BASE_URL, PASTED_TEXT_CHARACTER_LIMIT } from '$lib/constants';
 
-	import UsageIndicator from '$lib/components/common/UsageIndicator.svelte';
+	// import UsageIndicator from '$lib/components/common/UsageIndicator.svelte';
 	import InputMenu from './MessageInput/InputMenu.svelte';
 	import VoiceRecording from './MessageInput/VoiceRecording.svelte';
 	import FilesOverlay from './MessageInput/FilesOverlay.svelte';
@@ -485,16 +485,16 @@
 	let usageData = null;
 	let usageInterval;
 
-	async function fetchUsageData() {
-		try {
-			const response = await getUsageSummary(localStorage.token);
-			if (response.success) {
-				usageData = response.data;
-			}
-		} catch (error) {
-			console.error('Failed to fetch usage data:', error);
-		}
-	}
+	// async function fetchUsageData() {
+		// try {
+			// const response = await getUsageSummary(localStorage.token);
+			// if (response.success) {
+				// usageData = response.data;
+			// }
+		// } catch (error) {
+			// console.error('Failed to fetch usage data:', error);
+		// }
+	// }
 
 	const scrollToBottom = () => {
 		const element = document.getElementById('messages-container');
@@ -932,9 +932,9 @@
 		dropzoneElement?.addEventListener('drop', onDrop);
 		dropzoneElement?.addEventListener('dragleave', onDragLeave);
 
-		await fetchUsageData();
+		// await fetchUsageData();
 		// Update usage data every minute
-		usageInterval = setInterval(fetchUsageData, 60000);
+		// usageInterval = setInterval(fetchUsageData, 60000);
 		await tools.set(await getTools(localStorage.token));
 	});
 
@@ -1625,9 +1625,9 @@
 											{/if}
 									</div>
 
-									<div class="self-end flex space-x-1 mr-1 shrink-0 overflow-x-auto scrollbar-none flex-nowrap">
+									<!-- <div class="self-end flex space-x-1 mr-1 shrink-0 overflow-x-auto scrollbar-none flex-nowrap">
 										<UsageIndicator className="shrink-0 min-w-0 max-w-[120px] truncate" />
-									</div>
+									</div> -->
 
 									<div class="ml-1 flex gap-1.5">
 										{#if (selectedToolIds ?? []).length > 0}

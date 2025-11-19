@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any
 from open_webui.models.usage import UserAPIUsageTable, UserAPILimitTable
 
@@ -8,13 +8,6 @@ log = logging.getLogger(__name__)
 
 class APIUsageTracker:
     """API 사용량 추적 및 제한 관리 클래스"""
-    
-    @staticmethod
-    def _parse_datetime(dt_value):
-        """datetime 값을 안전하게 파싱 (MySQL->PostgreSQL 마이그레이션 대응)"""
-        if isinstance(dt_value, str):
-            return datetime.fromisoformat(dt_value.replace('Z', '+00:00'))
-        return dt_value
     
     @staticmethod
     def get_external_usage_sum(user_id):
@@ -113,7 +106,7 @@ class APIUsageTracker:
     
     @staticmethod
     async def record_usage(user_id: str, url_idx: int, input_tokens: int, output_tokens: int, cost: float = 0.0, user: Any = None):
-        """API 사용량을 기록"""
+        """API 사용량을 기록 (개선된 버전: upsert 사용, UTC 타임존, race condition 방지)"""
         try:
             # 관리자는 기록하지 않음
             if user is not None and hasattr(user, 'role') and user.role == 'admin':
@@ -121,58 +114,115 @@ class APIUsageTracker:
 
             if not APIUsageTracker.is_external_api(url_idx):
                 return
-            
+
             total_tokens = input_tokens + output_tokens
             api_type = APIUsageTracker.get_api_type(url_idx)
-            
-            # 현재 사용량 레코드 조회 또는 생성
+            now_utc = datetime.now(timezone.utc)
+
+            # 현재 사용량 레코드 조회
             usage = UserAPIUsageTable.get_user_usage(user_id, api_type, url_idx)
+
             if not usage:
-                usage = UserAPIUsageTable.create_user_usage(user_id, api_type, url_idx)
-            
-            # 일일/월별 리셋 확인 (MySQL->PostgreSQL 마이그레이션 대응)
-            now = datetime.now()
-            
-            try:
-                # 문자열로 저장된 datetime 처리
-                last_daily = APIUsageTracker._parse_datetime(usage.last_daily_reset)
-                last_monthly = APIUsageTracker._parse_datetime(usage.last_monthly_reset)
-                
-                reset_daily = last_daily.date() < now.date()
-                reset_monthly = (last_monthly.month != now.month or 
-                               last_monthly.year != now.year)
-            except Exception as e:
-                log.error(f"Error parsing datetime in record_usage for user {user_id}: {e}, last_daily_reset type: {type(usage.last_daily_reset)}")
-                # 파싱 실패 시 안전하게 리셋 처리
-                reset_daily = True
-                reset_monthly = True
-            
+                # 레코드가 없으면 새로 생성 (upsert 사용)
+                UserAPIUsageTable.upsert_user_usage(
+                    user_id=user_id,
+                    api_type=api_type,
+                    url_idx=url_idx,
+                    daily_tokens=total_tokens,
+                    monthly_tokens=total_tokens,
+                    yearly_tokens=total_tokens,
+                    daily_requests=1,
+                    monthly_requests=1,
+                    yearly_requests=1,
+                    daily_cost=cost,
+                    monthly_cost=cost,
+                    yearly_cost=cost,
+                    last_daily_reset=now_utc,
+                    last_monthly_reset=now_utc,
+                    last_yearly_reset=now_utc
+                )
+                log.info(f"Created new usage record for user {user_id}: {total_tokens} tokens")
+                return
+
+            # 일일/월별/연간 리셋 확인 (UTC 기준)
+            last_daily = usage.last_daily_reset
+            last_monthly = usage.last_monthly_reset
+            last_yearly = usage.last_yearly_reset if hasattr(usage, 'last_yearly_reset') and usage.last_yearly_reset else now_utc
+
+            # 문자열인 경우 datetime으로 변환 (기존 데이터 호환성)
+            if isinstance(last_daily, str):
+                last_daily = datetime.fromisoformat(last_daily.replace('Z', '+00:00'))
+            if isinstance(last_monthly, str):
+                last_monthly = datetime.fromisoformat(last_monthly.replace('Z', '+00:00'))
+            if isinstance(last_yearly, str):
+                last_yearly = datetime.fromisoformat(last_yearly.replace('Z', '+00:00'))
+
+            # naive datetime인 경우 UTC로 가정
+            if last_daily.tzinfo is None:
+                last_daily = last_daily.replace(tzinfo=timezone.utc)
+            if last_monthly.tzinfo is None:
+                last_monthly = last_monthly.replace(tzinfo=timezone.utc)
+            if last_yearly.tzinfo is None:
+                last_yearly = last_yearly.replace(tzinfo=timezone.utc)
+
+            reset_daily = last_daily.date() < now_utc.date()
+            reset_monthly = (last_monthly.month != now_utc.month or
+                           last_monthly.year != now_utc.year)
+            reset_yearly = last_yearly.year < now_utc.year
+
             # 사용량 계산
             new_daily_tokens = total_tokens if reset_daily else usage.daily_tokens + total_tokens
             new_monthly_tokens = total_tokens if reset_monthly else usage.monthly_tokens + total_tokens
+            new_yearly_tokens = total_tokens if reset_yearly else (usage.yearly_tokens if hasattr(usage, 'yearly_tokens') else 0) + total_tokens
+
             new_daily_requests = 1 if reset_daily else usage.daily_requests + 1
             new_monthly_requests = 1 if reset_monthly else usage.monthly_requests + 1
+            new_yearly_requests = 1 if reset_yearly else (usage.yearly_requests if hasattr(usage, 'yearly_requests') else 0) + 1
+
             new_daily_cost = cost if reset_daily else usage.daily_cost + cost
             new_monthly_cost = cost if reset_monthly else usage.monthly_cost + cost
-            
-            # 레코드 업데이트
-            UserAPIUsageTable.update_user_usage(
-                usage.id,
-                daily_tokens=new_daily_tokens,
-                monthly_tokens=new_monthly_tokens,
-                daily_requests=new_daily_requests,
-                monthly_requests=new_monthly_requests,
-                daily_cost=new_daily_cost,
-                monthly_cost=new_monthly_cost,
-                last_daily_reset=now if reset_daily else usage.last_daily_reset,
-                last_monthly_reset=now if reset_monthly else usage.last_monthly_reset,
-                updated_at=now
+            new_yearly_cost = cost if reset_yearly else (usage.yearly_cost if hasattr(usage, 'yearly_cost') else 0.0) + cost
+
+            # upsert로 업데이트 (race condition 방지)
+            update_data = {
+                'daily_tokens': new_daily_tokens,
+                'monthly_tokens': new_monthly_tokens,
+                'yearly_tokens': new_yearly_tokens,
+                'daily_requests': new_daily_requests,
+                'monthly_requests': new_monthly_requests,
+                'yearly_requests': new_yearly_requests,
+                'daily_cost': new_daily_cost,
+                'monthly_cost': new_monthly_cost,
+                'yearly_cost': new_yearly_cost,
+            }
+
+            if reset_daily:
+                update_data['last_daily_reset'] = now_utc
+            if reset_monthly:
+                update_data['last_monthly_reset'] = now_utc
+            if reset_yearly:
+                update_data['last_yearly_reset'] = now_utc
+
+            UserAPIUsageTable.upsert_user_usage(
+                user_id=user_id,
+                api_type=api_type,
+                url_idx=url_idx,
+                **update_data
             )
-            
-            log.info(f"Recorded usage for user {user_id}: {total_tokens} tokens ({input_tokens} in + {output_tokens} out), cost: ${cost:.4f}")
-            
+
+            reset_info = []
+            if reset_daily:
+                reset_info.append("daily_reset")
+            if reset_monthly:
+                reset_info.append("monthly_reset")
+            if reset_yearly:
+                reset_info.append("yearly_reset")
+            reset_str = f" [{', '.join(reset_info)}]" if reset_info else ""
+
+            log.info(f"Recorded usage for user {user_id}: {total_tokens} tokens ({input_tokens} in + {output_tokens} out), cost: ${cost:.4f}{reset_str}")
+
         except Exception as e:
-            log.error(f"Error recording usage for user {user_id}: {e}")
+            log.error(f"Error recording usage for user {user_id}: {e}", exc_info=True)
     
     @staticmethod
     def is_external_api(url_idx: int) -> bool:
@@ -278,47 +328,71 @@ class APIUsageTracker:
     
     @staticmethod
     async def get_user_usage_details(user_id: str) -> Dict:
-        """사용자별 사용량 상세"""
+        """사용자별 사용량 상세 (UTC 타임존 사용)"""
         try:
             usages = UserAPIUsageTable.get_all_user_usage(user_id)
             limits = UserAPILimitTable.get_user_limits(user_id)
-            
-            # 현재 시간 기준으로 리셋 여부 확인
-            now = datetime.now()
-            
+
+            # 현재 시간 기준으로 리셋 여부 확인 (UTC)
+            now_utc = datetime.now(timezone.utc)
+
             current_usage = []
             for usage in usages:
                 try:
-                    # MySQL->PostgreSQL 마이그레이션 대응: 문자열 datetime 처리
-                    last_daily = APIUsageTracker._parse_datetime(usage.last_daily_reset)
-                    last_monthly = APIUsageTracker._parse_datetime(usage.last_monthly_reset)
-                    
-                    daily_reset_needed = last_daily.date() < now.date()
-                    monthly_reset_needed = (last_monthly.month != now.month or 
-                                          last_monthly.year != now.year)
+                    last_daily = usage.last_daily_reset
+                    last_monthly = usage.last_monthly_reset
+                    last_yearly = usage.last_yearly_reset if hasattr(usage, 'last_yearly_reset') and usage.last_yearly_reset else now_utc
+
+                    # 문자열인 경우 datetime으로 변환
+                    if isinstance(last_daily, str):
+                        last_daily = datetime.fromisoformat(last_daily.replace('Z', '+00:00'))
+                    if isinstance(last_monthly, str):
+                        last_monthly = datetime.fromisoformat(last_monthly.replace('Z', '+00:00'))
+                    if isinstance(last_yearly, str):
+                        last_yearly = datetime.fromisoformat(last_yearly.replace('Z', '+00:00'))
+
+                    # naive datetime인 경우 UTC로 가정
+                    if last_daily.tzinfo is None:
+                        last_daily = last_daily.replace(tzinfo=timezone.utc)
+                    if last_monthly.tzinfo is None:
+                        last_monthly = last_monthly.replace(tzinfo=timezone.utc)
+                    if last_yearly.tzinfo is None:
+                        last_yearly = last_yearly.replace(tzinfo=timezone.utc)
+
+                    daily_reset_needed = last_daily.date() < now_utc.date()
+                    monthly_reset_needed = (last_monthly.month != now_utc.month or
+                                          last_monthly.year != now_utc.year)
+                    yearly_reset_needed = last_yearly.year < now_utc.year
                 except Exception as e:
-                    log.error(f"Error parsing datetime for usage {usage.id}: {e}, last_daily_reset type: {type(usage.last_daily_reset)}, value: {usage.last_daily_reset}")
-                    # 파싱 실패 시 기본값으로 리셋 필요로 처리
-                    daily_reset_needed = True
-                    monthly_reset_needed = True
-                    last_daily = now
-                    last_monthly = now
-                
+                    log.error(f"Error processing datetime for usage {usage.id}: {e}")
+                    # 에러 시 안전하게 현재 값 표시
+                    daily_reset_needed = False
+                    monthly_reset_needed = False
+                    yearly_reset_needed = False
+                    last_daily = now_utc
+                    last_monthly = now_utc
+                    last_yearly = now_utc
+
                 current_usage.append({
                     "api_type": usage.api_type,
                     "url_idx": usage.url_idx,
                     "daily_tokens": 0 if daily_reset_needed else usage.daily_tokens,
                     "monthly_tokens": 0 if monthly_reset_needed else usage.monthly_tokens,
+                    "yearly_tokens": 0 if yearly_reset_needed else (usage.yearly_tokens if hasattr(usage, 'yearly_tokens') else 0),
                     "daily_requests": 0 if daily_reset_needed else usage.daily_requests,
                     "monthly_requests": 0 if monthly_reset_needed else usage.monthly_requests,
+                    "yearly_requests": 0 if yearly_reset_needed else (usage.yearly_requests if hasattr(usage, 'yearly_requests') else 0),
                     "daily_cost": 0.0 if daily_reset_needed else usage.daily_cost,
                     "monthly_cost": 0.0 if monthly_reset_needed else usage.monthly_cost,
+                    "yearly_cost": 0.0 if yearly_reset_needed else (usage.yearly_cost if hasattr(usage, 'yearly_cost') else 0.0),
                     "last_daily_reset": last_daily.isoformat(),
                     "last_monthly_reset": last_monthly.isoformat(),
+                    "last_yearly_reset": last_yearly.isoformat(),
                     "needs_daily_reset": daily_reset_needed,
-                    "needs_monthly_reset": monthly_reset_needed
+                    "needs_monthly_reset": monthly_reset_needed,
+                    "needs_yearly_reset": yearly_reset_needed
                 })
-            
+
             return {
                 "user_id": user_id,
                 "limits": {
@@ -333,7 +407,7 @@ class APIUsageTracker:
                 "current_usage": current_usage,
                 "total_apis": len(current_usage)
             }
-            
+
         except Exception as e:
             log.error(f"Error getting user usage details for {user_id}: {e}")
             return {"user_id": user_id, "error": str(e)}
@@ -371,11 +445,12 @@ class APIUsageTracker:
     
     @staticmethod
     async def reset_user_usage(user_id: str, reset_type: str = "daily") -> Dict:
-        """사용자 사용량 리셋 (관리자 기능)"""
+        """사용자 사용량 리셋 (관리자 기능, UTC 타임존 사용)"""
         try:
             usages = UserAPIUsageTable.get_all_user_usage(user_id)
             reset_count = 0
-            
+            now_utc = datetime.now(timezone.utc)
+
             for usage in usages:
                 if reset_type == "daily":
                     UserAPIUsageTable.update_user_usage(
@@ -383,7 +458,7 @@ class APIUsageTracker:
                         daily_tokens=0,
                         daily_requests=0,
                         daily_cost=0.0,
-                        last_daily_reset=datetime.now()
+                        last_daily_reset=now_utc
                     )
                 elif reset_type == "monthly":
                     UserAPIUsageTable.update_user_usage(
@@ -391,29 +466,41 @@ class APIUsageTracker:
                         monthly_tokens=0,
                         monthly_requests=0,
                         monthly_cost=0.0,
-                        last_monthly_reset=datetime.now()
+                        last_monthly_reset=now_utc
+                    )
+                elif reset_type == "yearly":
+                    UserAPIUsageTable.update_user_usage(
+                        usage.id,
+                        yearly_tokens=0,
+                        yearly_requests=0,
+                        yearly_cost=0.0,
+                        last_yearly_reset=now_utc
                     )
                 elif reset_type == "all":
                     UserAPIUsageTable.update_user_usage(
                         usage.id,
                         daily_tokens=0,
                         monthly_tokens=0,
+                        yearly_tokens=0,
                         daily_requests=0,
                         monthly_requests=0,
+                        yearly_requests=0,
                         daily_cost=0.0,
                         monthly_cost=0.0,
-                        last_daily_reset=datetime.now(),
-                        last_monthly_reset=datetime.now()
+                        yearly_cost=0.0,
+                        last_daily_reset=now_utc,
+                        last_monthly_reset=now_utc,
+                        last_yearly_reset=now_utc
                     )
                 reset_count += 1
-            
+
             return {
                 "success": True,
                 "user_id": user_id,
                 "reset_type": reset_type,
                 "records_reset": reset_count
             }
-            
+
         except Exception as e:
             log.error(f"Error resetting usage for {user_id}: {e}")
             return {"success": False, "error": str(e)}

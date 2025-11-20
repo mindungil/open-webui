@@ -312,3 +312,6 @@ cypress/screenshots
 .vscode/settings.json
 
 .config-export.json
+
+src/lib/constants.ts
+backend/open_webui/dev.sh

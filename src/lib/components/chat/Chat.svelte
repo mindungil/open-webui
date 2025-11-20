@@ -78,6 +78,7 @@
 		stopTask,
 		getTaskIdsByChatId
 	} from '$lib/apis';
+	import { getGPTTemplateById } from '$lib/apis/gpt-templates';
 	import { getTools } from '$lib/apis/tools';
 	import { uploadFile } from '$lib/apis/files';
 	import { createOpenAITextStream } from '$lib/apis/streaming';
@@ -141,6 +142,7 @@
 
 	let chat = null;
 	let tags = [];
+	let currentTemplate = null;
 
 	let history = {
 		messages: {},
@@ -1082,6 +1084,16 @@
 				return [];
 			});
 
+			// GPT 템플릿 정보 로드
+			if (chat.template_id) {
+				currentTemplate = await getGPTTemplateById(localStorage.token, chat.template_id).catch((error) => {
+					console.error('Failed to load template:', error);
+					return null;
+				});
+			} else {
+				currentTemplate = null;
+			}
+
 			const chatContent = chat.chat;
 
 			if (chatContent) {
@@ -1094,6 +1106,14 @@
 
 				if (!($user?.role === 'admin' || ($user?.permissions?.chat?.multiple_models ?? true))) {
 					selectedModels = selectedModels.length > 0 ? [selectedModels[0]] : [''];
+				}
+
+				// 템플릿 채팅에서 모델이 비어있으면 기본 모델 설정
+				if (selectedModels.includes('') || selectedModels.length === 0) {
+					const defaultModel = $settings?.models?.[0] || $config?.default_models?.split(',')?.[0] || $models?.[0]?.id || '';
+					if (defaultModel) {
+						selectedModels = [defaultModel];
+					}
 				}
 
 				oldSelectedModelIds = selectedModels;
@@ -2264,7 +2284,8 @@
 					tags: [],
 					timestamp: Date.now()
 				},
-				$selectedFolder?.id
+				$selectedFolder?.id,
+				currentTemplate?.id ?? null
 			);
 
 			_chatId = chat.id;
@@ -2432,6 +2453,7 @@
 						{history}
 						title={$chatTitle}
 						bind:selectedModels
+						{currentTemplate}
 						shareEnabled={!!history.currentId}
 						{initNewChat}
 						archiveChatHandler={() => {}}

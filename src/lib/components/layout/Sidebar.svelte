@@ -1,6 +1,9 @@
 <script lang="ts">
 	import { toast } from 'svelte-sonner';
 	import { v4 as uuidv4 } from 'uuid';
+	import { onMount, getContext, tick, onDestroy } from 'svelte';
+	import { slide } from 'svelte/transition';
+	import { ChevronDown, ChevronRight } from 'lucide-svelte'; // Import 이동
 
 	import { goto } from '$app/navigation';
 	import {
@@ -25,13 +28,15 @@
 		isApp,
 		models,
 		selectedFolder,
-		WEBUI_NAME
+		WEBUI_NAME,
+		showGPTsSubmenu,
+		userGPTs
 	} from '$lib/stores';
-	import { onMount, getContext, tick, onDestroy } from 'svelte';
 
 	const i18n = getContext('i18n');
 
 	import {
+		createNewChat,
 		getChatList,
 		getAllTags,
 		getPinnedChatList,
@@ -41,6 +46,8 @@
 		importChat
 	} from '$lib/apis/chats';
 	import { createNewFolder, getFolders, updateFolderParentIdById } from '$lib/apis/folders';
+	import { getUserGPTTemplates } from '$lib/apis/gpt-templates';
+	import { getChannels, createNewChannel } from '$lib/apis/channels';
 	import { WEBUI_BASE_URL } from '$lib/constants';
 
 	import ArchivedChatsModal from './ArchivedChatsModal.svelte';
@@ -51,7 +58,6 @@
 	import Folder from '../common/Folder.svelte';
 	import Tooltip from '../common/Tooltip.svelte';
 	import Folders from './Sidebar/Folders.svelte';
-	import { getChannels, createNewChannel } from '$lib/apis/channels';
 	import ChannelModal from './Sidebar/ChannelModal.svelte';
 	import ChannelItem from './Sidebar/ChannelItem.svelte';
 	import PencilSquare from '../icons/PencilSquare.svelte';
@@ -61,7 +67,6 @@
 	import Sidebar from '../icons/Sidebar.svelte';
 	import PinnedModelList from './Sidebar/PinnedModelList.svelte';
 	import Note from '../icons/Note.svelte';
-	import { slide } from 'svelte/transition';
 	import HotkeyHint from '../common/HotkeyHint.svelte';
 
 	const BREAKPOINT = 768;
@@ -176,6 +181,18 @@
 
 	const initChannels = async () => {
 		await channels.set(await getChannels(localStorage.token));
+	};
+
+	const handleTemplateClick = async (template) => {
+		// 템플릿 채팅 페이지로 이동
+		goto(`/t/${template.id}`);
+	};
+
+	const initUserGPTs = async () => {
+		const templates = await getUserGPTTemplates(localStorage.token);
+		if (templates) {
+			userGPTs.set(templates);
+		}
 	};
 
 	const initChatList = async () => {
@@ -390,6 +407,7 @@
 
 				if (value) {
 					await initChannels();
+					await initUserGPTs();
 					await initChatList();
 				}
 			})
@@ -507,8 +525,6 @@
 		showCreateFolderModal = false;
 	}}
 />
-
-<!-- svelte-ignore a11y-no-static-element-interactions -->
 
 {#if $showSidebar}
 	<div
@@ -722,7 +738,7 @@
 			: ' bg-transparent z-0 '} {$isApp
 			? `ml-[4.5rem] md:ml-0 `
 			: ' transition-all duration-300 '} shrink-0 text-gray-900 dark:text-gray-200 text-sm fixed top-0 left-0 overflow-x-hidden
-        "
+        "
 		transition:slide={{ duration: 250, axis: 'x' }}
 		data-state={$showSidebar}
 	>
@@ -886,10 +902,53 @@
 							</a>
 						</div>
 					{/if}
-					<!-- 여기에 GPTs 구현하기 -->
-					
-					<!-- -->
-				</div>
+
+					<div class="px-[7px] flex flex-col text-gray-800 dark:text-gray-200">
+						<button
+							id="sidebar-gpts-button"
+							class="group flex items-center space-x-3 rounded-2xl px-2.5 py-2 hover:bg-gray-100 dark:hover:bg-gray-900 transition outline-none"
+							on:click={() => {
+								showGPTsSubmenu.update((v) => !v);
+							}}
+							draggable="false"
+							aria-label="GPTs"
+						>
+							<div class="self-center text-lg">🤖</div>
+							<div class="flex flex-1 self-center text-sm font-primary">GPTs</div>
+
+							<div class="self-center">
+								{#if $showGPTsSubmenu}
+									<ChevronDown size="16" />
+								{:else}
+									<ChevronRight size="16" />
+								{/if}
+							</div>
+						</button>
+						{#if $showGPTsSubmenu}
+							<div class="flex flex-col pl-5 mt-1">
+								<a
+									href="/gpts/explore"
+									class="flex items-center gap-2 px-2.5 py-1.5 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-850 transition"
+								>
+									<div class="text-base">🔍</div>
+									<div class="text-sm font-primary">탐색하기</div>
+								</a>
+
+								<div class="border-t border-gray-200 dark:border-gray-700 my-1"></div>
+
+								{#each $userGPTs as gpt}
+									<button
+										on:click={() => handleTemplateClick(gpt)}
+										class="flex items-center gap-2 px-2.5 py-1.5 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-850 transition w-full text-left"
+									>
+										<div class="text-base">{gpt.icon || '💬'}</div>
+										<div class="text-sm truncate">{gpt.name}</div>
+									</button>
+								{/each}
+							</div>
+						{/if}
+					</div>
+					</div>
 
 				{#if ($models ?? []).length > 0 && ($settings?.pinnedModels ?? []).length > 0}
 					<Folder
@@ -1111,6 +1170,7 @@
 												className=""
 												id={chat.id}
 												title={chat.title}
+												templateId={chat.template_id}
 												{shiftKey}
 												selected={selectedChatId === chat.id}
 												on:select={() => {
@@ -1146,24 +1206,6 @@
 												: 'pt-5'} pb-1.5"
 										>
 											{$i18n.t(chat.time_range)}
-											<!-- localisation keys for time_range to be recognized from the i18next parser (so they don't get automatically removed):
-							{$i18n.t('Today')}
-							{$i18n.t('Yesterday')}
-							{$i18n.t('Previous 7 days')}
-							{$i18n.t('Previous 30 days')}
-							{$i18n.t('January')}
-							{$i18n.t('February')}
-							{$i18n.t('March')}
-							{$i18n.t('April')}
-							{$i18n.t('May')}
-							{$i18n.t('June')}
-							{$i18n.t('July')}
-							{$i18n.t('August')}
-							{$i18n.t('September')}
-							{$i18n.t('October')}
-							{$i18n.t('November')}
-							{$i18n.t('December')}
-							-->
 										</div>
 									{/if}
 
@@ -1171,6 +1213,7 @@
 										className=""
 										id={chat.id}
 										title={chat.title}
+										templateId={chat.template_id}
 										{shiftKey}
 										selected={selectedChatId === chat.id}
 										on:select={() => {

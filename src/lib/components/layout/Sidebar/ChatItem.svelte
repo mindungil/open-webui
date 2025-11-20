@@ -47,6 +47,7 @@
 
 	export let id;
 	export let title;
+	export let templateId: string | null = null;
 
 	export let selected = false;
 	export let shiftKey = false;
@@ -407,7 +408,7 @@
 				: selected
 					? 'bg-gray-100 dark:bg-gray-950 selected'
 					: ' group-hover:bg-gray-100 dark:group-hover:bg-gray-950'}  whitespace-nowrap text-ellipsis"
-			href="/c/{id}"
+			href={templateId ? `/t/${templateId}?chat=${id}` : `/c/${id}`}
 			on:click={() => {
 				dispatch('select');
 

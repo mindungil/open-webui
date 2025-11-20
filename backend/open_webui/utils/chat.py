@@ -9,6 +9,7 @@ import json
 import inspect
 import uuid
 import asyncio
+import aiohttp
 
 from fastapi import Request, status
 from starlette.responses import Response, StreamingResponse, JSONResponse
@@ -53,6 +54,9 @@ from open_webui.utils.response import (
 from open_webui.utils.filter import (
     get_sorted_filter_ids,
     process_filter_functions,
+)
+from open_webui.utils.files import (
+    get_document_url_from_base64,
 )
 
 from open_webui.env import SRC_LOG_LEVELS, GLOBAL_LOG_LEVEL, BYPASS_MODEL_ACCESS_CONTROL
@@ -180,6 +184,180 @@ async def generate_chat_completion(
                 **form_data["metadata"],
                 **request.state.metadata,
             }
+
+    # GPT Template 외부 API 연동
+    metadata = form_data.get("metadata", {})
+    template_api_url = metadata.get("template_api_url")
+    log.info(f"GPT Template API check - template_api_url: {template_api_url}")
+    if template_api_url:
+        # api_url에 전체 엔드포인트가 포함되어 있음 (예: http://example.com:8080/v1)
+        # /chat/completions를 추가
+        api_endpoint = f"{template_api_url.rstrip('/')}/chat/completions"
+
+        # 외부 API로 전송할 페이로드 준비 (metadata 제외)
+        external_payload = {
+            "model": form_data.get("model"),
+            "messages": form_data.get("messages", []),
+            "stream": form_data.get("stream", False),
+        }
+
+        # 선택적 파라미터 추가
+        if "temperature" in form_data:
+            external_payload["temperature"] = form_data["temperature"]
+        if "max_tokens" in form_data:
+            external_payload["max_tokens"] = form_data["max_tokens"]
+        if "top_p" in form_data:
+            external_payload["top_p"] = form_data["top_p"]
+        if "files" in form_data:
+            external_payload["files"] = form_data["files"]
+        if "tools" in form_data:
+            external_payload["tools"] = form_data["tools"]
+
+        # Helper function to process files in response
+        def process_response_files(result_data, req, usr, chat_meta):
+            """Process files in the response and upload them to storage"""
+            processed_files = []
+
+            # Check for files in the response
+            # Expected format: {"files": [{"name": "file.pdf", "data": "base64...", "type": "application/pdf"}]}
+            if "files" in result_data:
+                for file_info in result_data.get("files", []):
+                    try:
+                        file_data = file_info.get("data", "")
+                        file_name = file_info.get("name", "document")
+                        file_type = file_info.get("type", "application/octet-stream")
+
+                        # Create base64 string with proper format
+                        if not file_data.startswith("data:"):
+                            base64_string = f"data:{file_type};base64,{file_data}"
+                        else:
+                            base64_string = file_data
+
+                        # Upload file and get URL
+                        file_url, file_id = get_document_url_from_base64(
+                            req,
+                            base64_string,
+                            chat_meta,
+                            usr,
+                            file_name
+                        )
+
+                        if file_url:
+                            processed_files.append({
+                                "type": "file",
+                                "name": file_name,
+                                "url": file_url,
+                                "id": file_id,
+                                "collection_name": ""
+                            })
+                            log.info(f"Processed file: {file_name} -> {file_url}")
+                    except Exception as e:
+                        log.error(f"Error processing file {file_info.get('name', 'unknown')}: {e}")
+
+            return processed_files
+
+        try:
+            if form_data.get("stream", False):
+                # 스트리밍 응답 처리 - 세션을 generator 내부에서 관리
+                async def stream_external_response():
+                    try:
+                        async with aiohttp.ClientSession() as session:
+                            async with session.post(
+                                api_endpoint,
+                                json=external_payload,
+                                headers={"Content-Type": "application/json"}
+                            ) as response:
+                                buffer = ""
+                                async for line in response.content:
+                                    if line:
+                                        decoded_line = line.decode('utf-8', errors='replace')
+                                        buffer += decoded_line
+
+                                        # Check for complete SSE messages
+                                        while "\n" in buffer:
+                                            line_end = buffer.index("\n")
+                                            complete_line = buffer[:line_end]
+                                            buffer = buffer[line_end + 1:]
+
+                                            if complete_line.startswith("data: "):
+                                                data_content = complete_line[6:]
+                                                if data_content == "[DONE]":
+                                                    yield f"data: [DONE]\n\n".encode()
+                                                    continue
+
+                                                try:
+                                                    json_data = json.loads(data_content)
+
+                                                    # Check for files in streaming response
+                                                    if "files" in json_data:
+                                                        file_meta = {
+                                                            "chat_id": metadata.get("chat_id", None),
+                                                            "message_id": metadata.get("message_id", None),
+                                                            "session_id": metadata.get("session_id", None),
+                                                        }
+                                                        processed_files = process_response_files(json_data, request, user, file_meta)
+                                                        if processed_files:
+                                                            # Emit files event
+                                                            file_event = {
+                                                                "choices": [{
+                                                                    "delta": {
+                                                                        "content": "",
+                                                                        "files": processed_files
+                                                                    }
+                                                                }]
+                                                            }
+                                                            yield f"data: {json.dumps(file_event)}\n\n".encode()
+                                                        # Remove files from original response
+                                                        del json_data["files"]
+
+                                                    yield f"data: {json.dumps(json_data)}\n\n".encode()
+                                                except json.JSONDecodeError:
+                                                    yield f"{complete_line}\n".encode()
+                                            elif complete_line.strip():
+                                                yield f"{complete_line}\n".encode()
+
+                                # Yield remaining buffer
+                                if buffer.strip():
+                                    yield buffer.encode()
+                    except Exception as e:
+                        log.error(f"Error in streaming from {api_endpoint}: {e}")
+                        yield f"data: {json.dumps({'error': str(e)})}\n\n".encode()
+
+                return StreamingResponse(
+                    stream_external_response(),
+                    media_type="text/event-stream"
+                )
+            else:
+                # 일반 응답 처리
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(
+                        api_endpoint,
+                        json=external_payload,
+                        headers={"Content-Type": "application/json"}
+                    ) as response:
+                        result = await response.json()
+
+                        # Process files in non-streaming response
+                        if "files" in result:
+                            file_meta = {
+                                "chat_id": metadata.get("chat_id", None),
+                                "message_id": metadata.get("message_id", None),
+                                "session_id": metadata.get("session_id", None),
+                            }
+                            processed_files = process_response_files(result, request, user, file_meta)
+                            if processed_files:
+                                # Add processed files to response
+                                if "choices" in result and len(result["choices"]) > 0:
+                                    if "message" not in result["choices"][0]:
+                                        result["choices"][0]["message"] = {}
+                                    result["choices"][0]["message"]["files"] = processed_files
+                            # Remove raw file data from response
+                            del result["files"]
+
+                        return JSONResponse(content=result)
+        except Exception as e:
+            log.error(f"Error calling external API {api_endpoint}: {e}")
+            raise Exception(f"External API call failed: {str(e)}")
 
     if getattr(request.state, "direct", False) and hasattr(request.state, "model"):
         models = {

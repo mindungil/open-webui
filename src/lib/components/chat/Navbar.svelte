@@ -48,6 +48,7 @@
 	export let history;
 	export let selectedModels;
 	export let showModelSelector = true;
+	export let currentTemplate = null;
 
 	export let onSaveTempChat: () => {};
 	export let archiveChatHandler: (id: string) => void;
@@ -103,7 +104,13 @@
 			{$showSidebar ? 'ml-1' : ''}
 			"
 				>
-					{#if showModelSelector}
+					{#if currentTemplate}
+						<!-- 템플릿 모드: 템플릿 이름 고정 표시 -->
+						<div class="flex items-center gap-2 px-2 py-1">
+							<div class="text-lg">{currentTemplate.icon || '💬'}</div>
+							<div class="font-medium text-sm truncate">{currentTemplate.name}</div>
+						</div>
+					{:else if showModelSelector}
 						<ModelSelector bind:selectedModels showSetDefault={!shareEnabled} />
 					{/if}
 				</div>

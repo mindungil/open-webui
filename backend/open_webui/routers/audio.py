@@ -67,6 +67,9 @@ from docx.shared import Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from transformers import pipeline as whisper_pipeline
 
+from io import BytesIO
+from hwpx.document import HwpxDocument
+from hwpx.templates import blank_document_bytes
 
 router = APIRouter()
 
@@ -857,11 +860,13 @@ def transcribe_long_audio(request: Request, file_path, model_name='large-v3'):
 
         # 향상된 docx 문서 생성
         doc = create_enhanced_meeting_document(segments_list)
+        hwpx = create_enhanced_meeting_hwpx(segments_list)
 
         log.info("Faster-Whisper STT 처리 완료")
         return {
             'plain_text': plain_text,
             'docx_document': doc,
+            'hwpx_document': hwpx,
             'segments': segments_list
         }
 
@@ -1344,6 +1349,7 @@ def transcribe(request: Request, file_path: str, metadata: Optional[dict] = None
     result = transcribe_long_audio(request, file_path)
     plain_text = result['plain_text']
     docx_doc = result['docx_document']
+    hwpx_doc = result['hwpx_document']
     segments = result['segments']
     
     log.info(f"Transcription result length: {len(plain_text)} characters")
@@ -1430,11 +1436,80 @@ def transcribe(request: Request, file_path: str, metadata: Optional[dict] = None
                 },
             )
         )
+        
+        # 4. hwpx 파일 저장 및 업로드 (새로 추가)
+        hwpx_path = os.path.join(os.path.dirname(file_path), f"{os.path.splitext(filedata[1])[0]}.hwpx")
+        log.info(f"=== HWPX 저장 시작 ===")
+        log.info(f"hwpx_doc 타입: {type(hwpx_doc)}")
+        log.info(f"hwpx_doc is None: {hwpx_doc is None}")
+
+        if hwpx_doc is not None:
+            log.info(f"hwpx_doc paragraphs 수: {len(hwpx_doc.paragraphs)}")
+            # dirty 상태 확인
+            for i, sec in enumerate(hwpx_doc.sections):
+                log.info(f"section[{i}] dirty: {sec.dirty}")
+            # serialize 결과 확인
+            updates = hwpx_doc.oxml.serialize()
+            log.info(f"serialize() updates 수: {len(updates)}")
+            for part_name, data in updates.items():
+                log.info(f"  - {part_name}: {len(data)} bytes")
+
+        save_result = hwpx_doc.save(hwpx_path)
+        log.info(f"save() 반환값: {save_result}")
+
+        # 저장된 파일 확인
+        if os.path.exists(hwpx_path):
+            file_size = os.path.getsize(hwpx_path)
+            log.info(f"저장된 hwpx 파일 크기: {file_size} bytes")
+        else:
+            log.error(f"hwpx 파일이 생성되지 않았습니다: {hwpx_path}")
+
+        log.info(f"Detailed transcript saved to: {hwpx_path}")
+
+        # 5. docx 파일을 영구 저장소에 업로드
+        hwpx_id = f"{filedata[0]}hwpx"
+        hwpx_name = f"{os.path.splitext(filedata[1])[0]}.hwpx"
+        hwpx_filename = f"{filedata[2]}.hwpx"
+        with open(hwpx_path, "rb") as f:
+            hwpx_bytes, hwpx_storage_path = Storage.upload_file(
+                f, hwpx_filename,
+                tags = {
+                    **filedata[3],
+                    "OpenWebUI-File-Id": hwpx_id,
+                    "OpenWebUI-Transcript-Of": f"{filedata[0]}",
+                    "OpenWebUI-Transcript-Type": "detailed"
+                }
+            )
+
+        log.info(f"=== HWPX Storage 업로드 완료 ===")
+        log.info(f"hwpx_bytes 크기: {len(hwpx_bytes)} bytes")
+        log.info(f"hwpx_storage_path: {hwpx_storage_path}")
+
+        # 6. Files 테이블에 docx 파일 row 생성
+        Files.insert_new_file(
+            user_id,
+            FileForm(
+                id = hwpx_id,
+                filename = hwpx_name,
+                path = hwpx_storage_path,
+                meta = {
+                    "name": hwpx_name,
+                    "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    "size": len(hwpx_bytes),
+                    "data": {
+                        "transcript_of": filedata[0],
+                        "transcript_type": "detailed",
+                        "segments": segments
+                    }
+                },
+            )
+        )
 
         return {
             "text": plain_text,
             "transcript_file_id": txt_id,
-            "detailed_transcript_file_id": docx_id
+            "detailed_transcript_file_id": docx_id,
+            "detailed_transcript_hwpx_file_id": hwpx_id
         }
 
     except Exception as e:
@@ -1904,3 +1979,60 @@ def create_enhanced_meeting_document(segments_list):
             doc.add_paragraph("-" * 40)
 
     return doc
+
+# HWPX 회의록 생성 함수
+def create_enhanced_meeting_hwpx(segments_list):
+    log.info(f"=== HWPX 생성 시작 ===")
+    log.info(f"segments_list 길이: {len(segments_list)}")
+
+    try:
+        # 빈 문서 바이트 확인
+        blank_bytes = blank_document_bytes()
+        log.info(f"blank_document_bytes 크기: {len(blank_bytes)} bytes")
+
+        doc = HwpxDocument.open(BytesIO(blank_bytes))
+        log.info(f"HwpxDocument 생성 완료: {doc}")
+        log.info(f"sections 수: {len(doc.sections)}")
+
+        if not doc.sections:
+            log.error("문서에 섹션이 없습니다!")
+            return doc
+
+        section = doc.sections[0]
+        log.info(f"section: {section}")
+
+        # 제목
+        title_p = doc.add_paragraph("회의록", section=section)
+        log.info(f"제목 추가 완료: {title_p}")
+
+        # 생성 정보
+        info_p = doc.add_paragraph(
+            f"생성일시: {datetime.now().strftime('%Y년 %m월 %d일 %H:%M')}\n총 발언 구간: {len(segments_list)}개",
+            section=section
+        )
+        log.info(f"생성 정보 추가 완료")
+
+        # 구분선
+        doc.add_paragraph("=" * 60, section=section)
+        log.info(f"구분선 추가 완료")
+
+        # 세그먼트
+        for i, seg in enumerate(segments_list, 1):
+            p = doc.add_paragraph("", section=section)
+            p.add_run(f"[{seg['start']} - {seg['end']}] ", bold=True)  # 시간 강조
+            p.add_run(seg["text"])                                     # 본문
+
+            if i % 10 == 0 and i < len(segments_list):
+                doc.add_paragraph("-" * 40, section=section)
+
+        log.info(f"세그먼트 {len(segments_list)}개 추가 완료")
+        log.info(f"총 paragraphs 수: {len(doc.paragraphs)}")
+        log.info(f"=== HWPX 생성 완료 ===")
+
+        return doc
+
+    except Exception as e:
+        log.error(f"HWPX 생성 중 오류: {str(e)}")
+        import traceback
+        log.error(traceback.format_exc())
+        raise

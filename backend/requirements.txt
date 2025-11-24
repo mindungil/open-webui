@@ -413,3 +413,4 @@ ldap3==2.9.1
 ## Firecrawl
 firecrawl-py==4.5.0
 
+python-hwpx>=1.9

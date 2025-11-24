@@ -454,6 +454,11 @@ class Loader:
                     hwp_jar_path=self.kwargs.get("HWP_JAR_PATH", "/workspace/open-webui/backend/python-hwplib/hwplib-1.1.8.jar"),
                     hwpx_jar_path=self.kwargs.get("HWPX_JAR_PATH", "/workspace/open-webui/backend/python-hwpxlib/hwpxlib-1.0.5.jar")
                 )
+                # loader = DeepSeekOCRLoader(
+                #     file_path,
+                #     extract_images=True,
+                #     ocr_server_url="http://220.124.155.35:30100"
+                # )
             elif file_ext == "odt":
                 loader = UnstructuredODTLoader(file_path)
             elif self._is_text_file(file_ext, file_content_type):

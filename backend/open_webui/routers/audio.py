@@ -1986,6 +1986,24 @@ def create_enhanced_meeting_hwpx(segments_list):
     log.info(f"segments_list 길이: {len(segments_list)}")
 
     try:
+        # HWPX 네임스페이스 등록 (한글 프로그램 호환성)
+        import xml.etree.ElementTree as ET
+        ET.register_namespace('hp', 'http://www.hancom.co.kr/hwpml/2011/paragraph')
+        ET.register_namespace('hs', 'http://www.hancom.co.kr/hwpml/2011/section')
+        ET.register_namespace('hh', 'http://www.hancom.co.kr/hwpml/2011/head')
+        ET.register_namespace('ha', 'http://www.hancom.co.kr/hwpml/2011/app')
+        ET.register_namespace('hc', 'http://www.hancom.co.kr/hwpml/2011/core')
+        ET.register_namespace('hhs', 'http://www.hancom.co.kr/hwpml/2011/history')
+        ET.register_namespace('hm', 'http://www.hancom.co.kr/hwpml/2011/master-page')
+        ET.register_namespace('hpf', 'http://www.hancom.co.kr/schema/2011/hpf')
+        ET.register_namespace('hp10', 'http://www.hancom.co.kr/hwpml/2016/paragraph')
+        ET.register_namespace('ooxmlchart', 'http://www.hancom.co.kr/hwpml/2016/ooxmlchart')
+        ET.register_namespace('hwpunitchar', 'http://www.hancom.co.kr/hwpml/2016/HwpUnitChar')
+        ET.register_namespace('dc', 'http://purl.org/dc/elements/1.1/')
+        ET.register_namespace('opf', 'http://www.idpf.org/2007/opf/')
+        ET.register_namespace('epub', 'http://www.idpf.org/2007/ops')
+        ET.register_namespace('config', 'urn:oasis:names:tc:opendocument:xmlns:config:1.0')
+
         # 빈 문서 바이트 확인
         blank_bytes = blank_document_bytes()
         log.info(f"blank_document_bytes 크기: {len(blank_bytes)} bytes")

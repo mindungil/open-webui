@@ -28,9 +28,7 @@
 		isApp,
 		models,
 		selectedFolder,
-		WEBUI_NAME,
-		showGPTsSubmenu,
-		userGPTs
+		WEBUI_NAME
 	} from '$lib/stores';
 
 	const i18n = getContext('i18n');
@@ -46,7 +44,6 @@
 		importChat
 	} from '$lib/apis/chats';
 	import { createNewFolder, getFolders, updateFolderParentIdById } from '$lib/apis/folders';
-	import { getUserGPTTemplates } from '$lib/apis/gpt-templates';
 	import { getChannels, createNewChannel } from '$lib/apis/channels';
 	import { WEBUI_BASE_URL } from '$lib/constants';
 
@@ -80,6 +77,8 @@
 	let showPinnedChat = true;
 
 	let showCreateChannel = false;
+	let showGPTsMenu = false;
+	let gptsModels = [];
 
 	// Pagination variables
 	let chatListLoading = false;
@@ -181,18 +180,6 @@
 
 	const initChannels = async () => {
 		await channels.set(await getChannels(localStorage.token));
-	};
-
-	const handleTemplateClick = async (template) => {
-		// 템플릿 채팅 페이지로 이동
-		goto(`/t/${template.id}`);
-	};
-
-	const initUserGPTs = async () => {
-		const templates = await getUserGPTTemplates(localStorage.token);
-		if (templates) {
-			userGPTs.set(templates);
-		}
 	};
 
 	const initChatList = async () => {
@@ -407,7 +394,6 @@
 
 				if (value) {
 					await initChannels();
-					await initUserGPTs();
 					await initChatList();
 				}
 			})
@@ -694,6 +680,43 @@
 						</Tooltip>
 					</div>
 				{/if}
+
+			{#if $user?.role === 'admin' || $user?.permissions?.workspace?.models || $user?.permissions?.workspace?.knowledge}
+				<div class="">
+					<Tooltip content="GPTs" placement="right">
+						<a
+							class=" cursor-pointer flex rounded-xl hover:bg-gray-100 dark:hover:bg-gray-850 transition group"
+							href="/gpts"
+							on:click={async (e) => {
+								e.stopImmediatePropagation();
+								e.preventDefault();
+
+								goto('/gpts');
+								itemClickHandler();
+							}}
+							aria-label="GPTs"
+							draggable="false"
+						>
+							<div class=" self-center flex items-center justify-center size-9">
+								<svg
+									xmlns="http://www.w3.org/2000/svg"
+									fill="none"
+									viewBox="0 0 24 24"
+									stroke-width="1.5"
+									stroke="currentColor"
+									class="size-4.5"
+								>
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z"
+									/>
+								</svg>
+							</div>
+						</a>
+					</Tooltip>
+				</div>
+			{/if}
 			</div>
 		</button>
 
@@ -903,51 +926,93 @@
 						</div>
 					{/if}
 
-					<div class="px-[7px] flex flex-col text-gray-800 dark:text-gray-200">
-						<button
-							id="sidebar-gpts-button"
-							class="group flex items-center space-x-3 rounded-2xl px-2.5 py-2 hover:bg-gray-100 dark:hover:bg-gray-900 transition outline-none"
-							on:click={() => {
-								showGPTsSubmenu.update((v) => !v);
-							}}
-							draggable="false"
-							aria-label="GPTs"
-						>
-							<div class="self-center text-lg">🤖</div>
-							<div class="flex flex-1 self-center text-sm font-primary">GPTs</div>
+			{#if $user?.role === 'admin' || $user?.permissions?.workspace?.models || $user?.permissions?.workspace?.knowledge}
+				<div class="px-[7px] text-gray-800 dark:text-gray-200">
+					<button
+						id="sidebar-gpts-button"
+						class="grow flex items-center space-x-3 rounded-2xl px-2.5 py-2 hover:bg-gray-100 dark:hover:bg-gray-900 transition w-full"
+						on:click={() => {
+							showGPTsMenu = !showGPTsMenu;
+						}}
+						draggable="false"
+						aria-label="GPTs"
+					>
+						<div class="self-center">
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								fill="none"
+								viewBox="0 0 24 24"
+								stroke-width="2"
+								stroke="currentColor"
+								class="size-4.5"
+							>
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z"
+								/>
+							</svg>
+						</div>
 
-							<div class="self-center">
-								{#if $showGPTsSubmenu}
-									<ChevronDown size="16" />
-								{:else}
-									<ChevronRight size="16" />
-								{/if}
-							</div>
-						</button>
-						{#if $showGPTsSubmenu}
-							<div class="flex flex-col pl-5 mt-1">
-								<a
-									href="/gpts/explore"
-									class="flex items-center gap-2 px-2.5 py-1.5 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-850 transition"
-								>
-									<div class="text-base">🔍</div>
-									<div class="text-sm font-primary">탐색하기</div>
-								</a>
+						<div class="flex flex-1 self-center translate-y-[0.5px]">
+							<div class=" self-center text-sm font-primary">GPTs</div>
+						</div>
 
-								<div class="border-t border-gray-200 dark:border-gray-700 my-1"></div>
+						<div class="self-center">
+							{#if showGPTsMenu}
+								<ChevronDown className="size-4" strokeWidth="2" />
+							{:else}
+								<ChevronRight className="size-4" strokeWidth="2" />
+							{/if}
+						</div>
+					</button>
 
-								{#each $userGPTs as gpt}
-									<button
-										on:click={() => handleTemplateClick(gpt)}
-										class="flex items-center gap-2 px-2.5 py-1.5 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-850 transition w-full text-left"
+					{#if showGPTsMenu}
+						<div transition:slide={{ duration: 200 }} class="pl-4 mt-1 space-y-1">
+							<a
+								class="flex items-center space-x-2 rounded-2xl px-2.5 py-1.5 hover:bg-gray-100 dark:hover:bg-gray-900 transition text-sm group"
+								href="/gpts"
+								on:click={itemClickHandler}
+							>
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="size-4 text-gray-400 dark:text-gray-500 group-hover:text-gray-600 dark:group-hover:text-gray-300">
+									<path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+								</svg>
+								<div class="self-center text-gray-600 dark:text-gray-400 font-medium">
+									탐색하기
+								</div>
+							</a>
+
+							{#if ($models ?? []).filter(m => m.is_active && m.source === 'gpts').length > 0}
+								<div class="px-2.5 py-1.5 text-xs text-gray-500 dark:text-gray-500 font-medium">
+									활성화된 모델
+								</div>
+								{#each ($models ?? []).filter(m => m.is_active && m.source === 'gpts') as model}
+									<a
+										class="flex items-center space-x-2 rounded-2xl px-2.5 py-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 transition text-sm group"
+										href={`/?models=${encodeURIComponent(model.id)}`}
+										on:click={itemClickHandler}
 									>
-										<div class="text-base">{gpt.icon || '💬'}</div>
-										<div class="text-sm truncate">{gpt.name}</div>
-									</button>
+										<div class="relative">
+											<img
+												src={model?.meta?.profile_image_url ?? `${WEBUI_BASE_URL}/static/favicon.png`}
+												alt={model.name}
+												class="size-6 rounded-full object-cover border border-gray-300 dark:border-gray-600"
+											/>
+											<div class="absolute -bottom-0.5 -right-0.5 size-2.5 bg-green-500 rounded-full border-2 border-white dark:border-gray-900"></div>
+										</div>
+										<div class="flex-1 self-center truncate text-gray-700 dark:text-gray-300 font-medium">
+											{model.name}
+										</div>
+										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="size-3.5 text-gray-400 opacity-0 group-hover:opacity-100 transition">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+										</svg>
+									</a>
 								{/each}
-							</div>
-						{/if}
-					</div>
+							{/if}
+						</div>
+					{/if}
+				</div>
+			{/if}
 					</div>
 
 				{#if ($models ?? []).length > 0 && ($settings?.pinnedModels ?? []).length > 0}

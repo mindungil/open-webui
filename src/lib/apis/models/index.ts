@@ -1,9 +1,18 @@
 import { WEBUI_API_BASE_URL } from '$lib/constants';
 
-export const getModelItems = async (token: string = '') => {
+export const getModelItems = async (token: string = '', source: string | null = null) => {
 	let error = null;
 
-	const res = await fetch(`${WEBUI_API_BASE_URL}/models/list`, {
+	const searchParams = new URLSearchParams();
+	if (source) {
+		searchParams.append('source', source);
+	}
+
+	const url = source
+		? `${WEBUI_API_BASE_URL}/models/list?${searchParams.toString()}`
+		: `${WEBUI_API_BASE_URL}/models/list`;
+
+	const res = await fetch(url, {
 		method: 'GET',
 		headers: {
 			Accept: 'application/json',

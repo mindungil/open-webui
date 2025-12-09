@@ -4,7 +4,16 @@
 	import { onMount } from 'svelte';
 
 	onMount(() => {
-		// 기본적으로 탐색하기 페이지로 리다이렉트
-		goto('/gpts/explore');
+		if ($user?.role !== 'admin') {
+			if ($user?.permissions?.workspace?.models) {
+				goto('/gpts/models');
+			} else if ($user?.permissions?.workspace?.knowledge) {
+				goto('/gpts/knowledge');
+			} else {
+				goto('/');
+			}
+		} else {
+			goto('/gpts/models');
+		}
 	});
 </script>

@@ -98,6 +98,11 @@ class Model(Base):
 
     is_active = Column(Boolean, default=True)
 
+    source = Column(Text, default="workspace")
+    """
+        Source of the model: 'workspace' or 'gpts'
+    """
+
     updated_at = Column(BigInteger)
     created_at = Column(BigInteger)
 
@@ -114,6 +119,7 @@ class ModelModel(BaseModel):
     access_control: Optional[dict] = None
 
     is_active: bool
+    source: str = "workspace"
     updated_at: int  # timestamp in epoch
     created_at: int  # timestamp in epoch
 
@@ -141,6 +147,7 @@ class ModelForm(BaseModel):
     params: ModelParams
     access_control: Optional[dict] = None
     is_active: bool = True
+    source: str = "workspace"
 
 
 class ModelsTable:
@@ -174,9 +181,12 @@ class ModelsTable:
         with get_db() as db:
             return [ModelModel.model_validate(model) for model in db.query(Model).all()]
 
-    def get_models(self) -> list[ModelUserResponse]:
+    def get_models(self, source: Optional[str] = None) -> list[ModelUserResponse]:
         with get_db() as db:
-            all_models = db.query(Model).filter(Model.base_model_id != None).all()
+            query = db.query(Model).filter(Model.base_model_id != None)
+            if source:
+                query = query.filter(Model.source == source)
+            all_models = query.all()
 
             user_ids = list(set(model.user_id for model in all_models))
 
@@ -204,9 +214,9 @@ class ModelsTable:
             ]
 
     def get_models_by_user_id(
-        self, user_id: str, permission: str = "write"
+        self, user_id: str, permission: str = "write", source: Optional[str] = None
     ) -> list[ModelUserResponse]:
-        models = self.get_models()
+        models = self.get_models(source=source)
         user_group_ids = {group.id for group in Groups.get_groups_by_member_id(user_id)}
         return [
             model

@@ -40,7 +40,6 @@ class Chat(Base):
 
     meta = Column(JSON, server_default="{}")
     folder_id = Column(Text, nullable=True)
-    template_id = Column(Text, nullable=True)
 
     __table_args__ = (
         # Performance indexes for common queries
@@ -74,7 +73,6 @@ class ChatModel(BaseModel):
 
     meta: dict = {}
     folder_id: Optional[str] = None
-    template_id: Optional[str] = None
 
 
 ####################
@@ -85,7 +83,6 @@ class ChatModel(BaseModel):
 class ChatForm(BaseModel):
     chat: dict
     folder_id: Optional[str] = None
-    template_id: Optional[str] = None
 
 
 class ChatImportForm(ChatForm):
@@ -116,7 +113,6 @@ class ChatResponse(BaseModel):
     pinned: Optional[bool] = False
     meta: dict = {}
     folder_id: Optional[str] = None
-    template_id: Optional[str] = None
 
 
 class ChatTitleIdResponse(BaseModel):
@@ -124,7 +120,6 @@ class ChatTitleIdResponse(BaseModel):
     title: str
     updated_at: int
     created_at: int
-    template_id: Optional[str] = None
 
 
 class ChatTable:
@@ -142,7 +137,6 @@ class ChatTable:
                     ),
                     "chat": form_data.chat,
                     "folder_id": form_data.folder_id,
-                    "template_id": form_data.template_id,
                     "created_at": int(time.time()),
                     "updated_at": int(time.time()),
                 }
@@ -172,7 +166,6 @@ class ChatTable:
                     "meta": form_data.meta,
                     "pinned": form_data.pinned,
                     "folder_id": form_data.folder_id,
-                    "template_id": form_data.template_id,
                     "created_at": (
                         form_data.created_at
                         if form_data.created_at
@@ -529,7 +522,7 @@ class ChatTable:
                 query = query.filter_by(archived=False)
 
             query = query.order_by(Chat.updated_at.desc()).with_entities(
-                Chat.id, Chat.title, Chat.updated_at, Chat.created_at, Chat.template_id
+                Chat.id, Chat.title, Chat.updated_at, Chat.created_at
             )
 
             if skip:
@@ -547,7 +540,6 @@ class ChatTable:
                         "title": chat[1],
                         "updated_at": chat[2],
                         "created_at": chat[3],
-                        "template_id": chat[4],
                     }
                 )
                 for chat in all_chats

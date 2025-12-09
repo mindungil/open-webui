@@ -132,9 +132,7 @@ async def get_user_chat_list_by_user_id(
 @router.post("/new", response_model=Optional[ChatResponse])
 async def create_new_chat(form_data: ChatForm, user=Depends(get_verified_user)):
     try:
-        log.info(f"create_new_chat - template_id: {form_data.template_id}, folder_id: {form_data.folder_id}")
         chat = Chats.insert_new_chat(user.id, form_data)
-        log.info(f"create_new_chat result - chat.template_id: {chat.template_id}")
         return ChatResponse(**chat.model_dump())
     except Exception as e:
         log.exception(e)

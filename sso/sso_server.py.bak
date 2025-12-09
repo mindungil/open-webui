@@ -1,0 +1,133 @@
+# /workspace/open-webui/sso/sso_server.py
+
+from flask import Flask, request, redirect, make_response
+import hashlib
+import time
+import requests  # ← OpenWebUI 로그인 API 호출용
+
+app = Flask(__name__)
+
+# 포털 ↔ SSO 서버가 공유하는 시크릿 (이미 쓰던 값 있으면 그걸로)
+SSO_SECRET = "jb-portal-openwebui-2024-SSO-ONLY"
+TOKEN_TTL = 300  # 토큰 유효시간 5분
+
+# ★ OpenWebUI 백엔드 내부 주소 (Nginx upstream 포트에 맞춰서 수정 필요)
+# 예: nginx upstream 이 "server 127.0.0.1:8080;" 이라면 아래도 8080
+OPENWEBUI_PORTS = [8080, 8081, 8082, 8083]
+OPENWEBUI_LOGIN_PATH = "/api/v1/auths/signin"
+
+def create_token(uid, ts):
+    data = "%s|%s|%s" % (uid, ts, SSO_SECRET)
+    return hashlib.sha1(data.encode("utf-8")).hexdigest()
+
+def verify_sso(uid, ts, token):
+    """
+    uid/ts/token 검증 로직
+    """
+    if not uid or not ts or not token:
+        return False, "Invalid SSO request (missing params)"
+
+    try:
+        ts_val = int(ts)
+    except ValueError:
+        return False, "Invalid timestamp"
+
+    now_ms = int(time.time() * 1000)
+    if abs(now_ms - ts_val) > TOKEN_TTL * 1000:
+        return False, "SSO token expired"
+
+    expected = create_token(uid, ts_val)
+    if token != expected:
+        return False, "SSO token mismatch"
+
+    return True, ts_val
+
+
+def login_openwebui_as(uid):
+    """
+    OpenWebUI 로컬 로그인 API를 호출해서 세션 쿠키를 받아오는 함수.
+    현재는 admin@korea.kr 한 계정만 처리.
+    여러 포트(8080~8083)를 순차적으로 시도.
+    """
+    if uid != "admin@korea.kr":
+        return None, "지원하지 않는 계정입니다: %s" % uid
+
+    password = "1234"  # ★ 현재 알려주신 실제 비밀번호
+
+    payload = {
+        "email": uid,
+        "password": password
+    }
+
+    last_error = None
+
+    for port in OPENWEBUI_PORTS:
+        url = "http://127.0.0.1:%d%s" % (port, OPENWEBUI_LOGIN_PATH)
+        try:
+            print("[SSO] Trying OpenWebUI login at", url)
+            r = requests.post(url, json=payload, timeout=5)
+        except requests.exceptions.ConnectionError as e:
+            # 해당 포트는 죽어있거나 안 떠 있는 것 → 다음 포트 시도
+            print("[SSO] Connection error on port %d: %s" % (port, str(e)))
+            last_error = "Connection error on port %d: %s" % (port, str(e))
+            continue
+        except Exception as e:
+            print("[SSO] Error on port %d: %s" % (port, str(e)))
+            last_error = "Error on port %d: %s" % (port, str(e))
+            continue
+
+        # 여기까지 왔으면 TCP 연결은 성공
+        if r.status_code == 200:
+            print("[SSO] OpenWebUI login OK via port", port)
+            return r.cookies, None
+        else:
+            msg = "OpenWebUI 로그인 실패 (port=%d, status=%s, body=%s)" % (
+                port, r.status_code, r.text
+            )
+            print("[SSO]", msg)
+            last_error = msg
+            # 다른 포트에서도 시도해 볼 수 있으므로 continue
+            continue
+
+    # 여기까지 오면 모든 포트 시도 실패
+    if last_error is None:
+        last_error = "모든 포트(8080~8083)에 접속 실패"
+    return None, last_error
+
+
+@app.route("/sso-login")
+def sso_login():
+    uid   = request.args.get("uid", "")
+    ts    = request.args.get("ts", "")
+    token = request.args.get("token", "")
+
+    ok, info = verify_sso(uid, ts, token)
+    if not ok:
+        return info, 400
+
+    # 1) SSO는 통과했으니, OpenWebUI 에서 해당 계정으로 로그인 시도
+    cookies, err = login_openwebui_as(uid)
+    if err is not None:
+        # 디버깅을 위해 에러 메세지 그대로 보여줌 (운영 시에는 로그로만 남겨도 됨)
+        return err, 500
+
+    # 2) OpenWebUI 가 발급한 세션 쿠키를 클라이언트(브라우저)로 전달
+    resp = make_response(redirect("/"))  # 로그인 후 메인 페이지로 이동
+
+    for c in cookies:
+        # 보통 하나지만 안전하게 전체 복사
+        resp.set_cookie(
+            c.name,
+            c.value,
+            httponly=True,
+            secure=True,
+            samesite="Lax",
+            path="/"
+        )
+
+    return resp
+
+if __name__ == "__main__":
+    # 개발용 (테스트 시)
+    app.run(host="0.0.0.0", port=4000)
+

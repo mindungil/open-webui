@@ -1,7 +1,5 @@
 <script>
-        import { io } from 'socket.io-client';
 	import { spring } from 'svelte/motion';
-	import PyodideWorker from '$lib/workers/pyodide.worker?worker';
 	import { Toaster, toast } from 'svelte-sonner';
 
 	let loadingProgress = spring(0, {
@@ -71,6 +69,9 @@
 	const BREAKPOINT = 768;
 
 	const setupSocket = async (enableWebsocket) => {
+		// 동적 import로 socket.io-client 로드 (필요할 때만)
+		const { io } = await import('socket.io-client');
+
 		const _socket = io(`${WEBUI_BASE_URL}` || undefined, {
 			reconnection: true,
 			reconnectionDelay: 1000,
@@ -145,6 +146,9 @@
 			/\bimport\s+pytz\b|\bfrom\s+pytz\b/.test(code) ? 'pytz' : null
 		].filter(Boolean);
 
+		// 동적 import로 PyodideWorker 로드 (필요할 때만)
+		const PyodideWorkerModule = await import('$lib/workers/pyodide.worker?worker');
+		const PyodideWorker = PyodideWorkerModule.default;
 		const pyodideWorker = new PyodideWorker();
 
 		pyodideWorker.postMessage({

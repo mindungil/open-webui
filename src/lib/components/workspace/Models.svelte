@@ -101,7 +101,7 @@
 				$config?.features?.enable_direct_connections && ($settings?.directConnections ?? null)
 			)
 		);
-		models = await getWorkspaceModels(localStorage.token);
+		models = await getWorkspaceModels(localStorage.token, 'workspace');
 	};
 
 	const cloneModelHandler = async (model) => {
@@ -156,7 +156,7 @@
 				$config?.features?.enable_direct_connections && ($settings?.directConnections ?? null)
 			)
 		);
-		models = await getWorkspaceModels(localStorage.token);
+		models = await getWorkspaceModels(localStorage.token, 'workspace');
 	};
 
 	const copyLinkHandler = async (model) => {
@@ -199,7 +199,7 @@
 	onMount(async () => {
 		viewOption = localStorage.workspaceViewOption ?? '';
 
-		models = await getWorkspaceModels(localStorage.token);
+		models = await getWorkspaceModels(localStorage.token, 'workspace');
 		let groups = await getGroups(localStorage.token);
 		group_ids = groups.map((group) => group.id);
 
@@ -290,7 +290,7 @@
 							$config?.features?.enable_direct_connections && ($settings?.directConnections ?? null)
 						)
 					);
-					models = await getWorkspaceModels(localStorage.token);
+					models = await getWorkspaceModels(localStorage.token, 'workspace');
 				};
 
 				reader.readAsText(importFiles[0]);

@@ -88,3 +88,7 @@ start_backend
 # log "Tail: /tmp/openwebui-backend.log"
 # tail -n +1 -f /tmp/openwebui-backend.log
 
+
+# SSO Server
+python /workspace/open-webui/sso/sso_server.py &
+

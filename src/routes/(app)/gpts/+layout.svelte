@@ -4,7 +4,9 @@
 		WEBUI_NAME,
 		showSidebar,
 		user,
-		mobile
+		mobile,
+		models,
+		knowledge
 	} from '$lib/stores';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
@@ -16,11 +18,14 @@
 	let loaded = false;
 
 	onMount(async () => {
-		// GPTs 기능 권한 체크
 		if ($user?.role !== 'admin') {
-			if (!($user?.permissions?.features?.gpts ?? true)) {
+			if ($page.url.pathname.includes('/models') && !$user?.permissions?.workspace?.models) {
 				goto('/');
-				return;
+			} else if (
+				$page.url.pathname.includes('/knowledge') &&
+				!$user?.permissions?.workspace?.knowledge
+			) {
+				goto('/');
 			}
 		}
 
@@ -30,7 +35,7 @@
 
 <svelte:head>
 	<title>
-		{$i18n.t('GPTs')} • {$WEBUI_NAME}
+		GPTs • {$WEBUI_NAME}
 	</title>
 </svelte:head>
 
@@ -67,23 +72,25 @@
 					<div
 						class="flex gap-1 scrollbar-none overflow-x-auto w-fit text-center text-sm font-medium rounded-full bg-transparent py-1 touch-auto pointer-events-auto"
 					>
-						<!-- 탐색하기 탭 -->
-						<a
-							class="min-w-fit p-1.5 {$page.url.pathname.includes('/gpts/explore')
-								? ''
-								: 'text-gray-300 dark:text-gray-600 hover:text-gray-700 dark:hover:text-white'} transition"
-							href="/gpts/explore">{$i18n.t('Explore')}</a
-						>
+						{#if $user?.role === 'admin' || $user?.permissions?.workspace?.models}
+							<a
+								class="min-w-fit p-1.5 {$page.url.pathname.includes('/gpts/models')
+									? ''
+									: 'text-gray-300 dark:text-gray-600 hover:text-gray-700 dark:hover:text-white'} transition"
+								href="/gpts/models">{$i18n.t('Models')}</a
+							>
+						{/if}
 
-						<!-- 내 GPTs 탭 (미래 확장용) -->
-						<!-- <a
-							class="min-w-fit p-1.5 {$page.url.pathname.includes('/gpts/my')
-								? ''
-								: 'text-gray-300 dark:text-gray-600 hover:text-gray-700 dark:hover:text-white'} transition"
-							href="/gpts/my"
-						>
-							{$i18n.t('My GPTs')}
-						</a> -->
+						{#if $user?.role === 'admin' || $user?.permissions?.workspace?.knowledge}
+							<a
+								class="min-w-fit p-1.5 {$page.url.pathname.includes('/gpts/knowledge')
+									? ''
+									: 'text-gray-300 dark:text-gray-600 hover:text-gray-700 dark:hover:text-white'} transition"
+								href="/gpts/knowledge"
+							>
+								지식 데이터
+							</a>
+						{/if}
 					</div>
 				</div>
 			</div>

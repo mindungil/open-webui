@@ -40,13 +40,13 @@ router = APIRouter()
 
 
 @router.get("/", response_model=list[KnowledgeUserResponse])
-async def get_knowledge(user=Depends(get_verified_user)):
+async def get_knowledge(source: Optional[str] = None, user=Depends(get_verified_user)):
     knowledge_bases = []
 
     if user.role == "admin" and BYPASS_ADMIN_ACCESS_CONTROL:
-        knowledge_bases = Knowledges.get_knowledge_bases()
+        knowledge_bases = Knowledges.get_knowledge_bases(source=source)
     else:
-        knowledge_bases = Knowledges.get_knowledge_bases_by_user_id(user.id, "read")
+        knowledge_bases = Knowledges.get_knowledge_bases_by_user_id(user.id, "read", source=source)
 
     # Get files for each knowledge base
     knowledge_with_files = []
@@ -88,13 +88,13 @@ async def get_knowledge(user=Depends(get_verified_user)):
 
 
 @router.get("/list", response_model=list[KnowledgeUserResponse])
-async def get_knowledge_list(user=Depends(get_verified_user)):
+async def get_knowledge_list(source: Optional[str] = None, user=Depends(get_verified_user)):
     knowledge_bases = []
 
     if user.role == "admin" and BYPASS_ADMIN_ACCESS_CONTROL:
-        knowledge_bases = Knowledges.get_knowledge_bases()
+        knowledge_bases = Knowledges.get_knowledge_bases(source=source)
     else:
-        knowledge_bases = Knowledges.get_knowledge_bases_by_user_id(user.id, "write")
+        knowledge_bases = Knowledges.get_knowledge_bases_by_user_id(user.id, "write", source=source)
 
     # Get files for each knowledge base
     knowledge_with_files = []

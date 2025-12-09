@@ -4,7 +4,8 @@ export const createNewKnowledge = async (
 	token: string,
 	name: string,
 	description: string,
-	accessControl: null | object
+	accessControl: null | object,
+	source: string = 'workspace'
 ) => {
 	let error = null;
 
@@ -18,7 +19,8 @@ export const createNewKnowledge = async (
 		body: JSON.stringify({
 			name: name,
 			description: description,
-			access_control: accessControl
+			access_control: accessControl,
+			source: source
 		})
 	})
 		.then(async (res) => {
@@ -38,10 +40,19 @@ export const createNewKnowledge = async (
 	return res;
 };
 
-export const getKnowledgeBases = async (token: string = '') => {
+export const getKnowledgeBases = async (token: string = '', source: string | null = null) => {
 	let error = null;
 
-	const res = await fetch(`${WEBUI_API_BASE_URL}/knowledge/`, {
+	const searchParams = new URLSearchParams();
+	if (source) {
+		searchParams.append('source', source);
+	}
+
+	const url = source
+		? `${WEBUI_API_BASE_URL}/knowledge/?${searchParams.toString()}`
+		: `${WEBUI_API_BASE_URL}/knowledge/`;
+
+	const res = await fetch(url, {
 		method: 'GET',
 		headers: {
 			Accept: 'application/json',
@@ -69,10 +80,19 @@ export const getKnowledgeBases = async (token: string = '') => {
 	return res;
 };
 
-export const getKnowledgeBaseList = async (token: string = '') => {
+export const getKnowledgeBaseList = async (token: string = '', source: string | null = null) => {
 	let error = null;
 
-	const res = await fetch(`${WEBUI_API_BASE_URL}/knowledge/list`, {
+	const searchParams = new URLSearchParams();
+	if (source) {
+		searchParams.append('source', source);
+	}
+
+	const url = source
+		? `${WEBUI_API_BASE_URL}/knowledge/list?${searchParams.toString()}`
+		: `${WEBUI_API_BASE_URL}/knowledge/list`;
+
+	const res = await fetch(url, {
 		method: 'GET',
 		headers: {
 			Accept: 'application/json',

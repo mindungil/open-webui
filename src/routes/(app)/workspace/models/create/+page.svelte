@@ -40,7 +40,8 @@
 						? modelInfo.meta.suggestion_prompts.filter((prompt) => prompt.content !== '')
 						: null
 				},
-				params: { ...modelInfo.params }
+				params: { ...modelInfo.params },
+				source: 'workspace'
 			}).catch((error) => {
 				toast.error(`${error}`);
 				return null;

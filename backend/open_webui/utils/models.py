@@ -161,6 +161,8 @@ async def get_all_models(request, refresh: bool = False, user: UserModel = None)
                     if custom_model.is_active:
                         model["name"] = custom_model.name
                         model["info"] = custom_model.model_dump()
+                        model["is_active"] = custom_model.is_active
+                        model["source"] = custom_model.source
 
                         # Set action_ids and filter_ids
                         action_ids = []
@@ -208,6 +210,8 @@ async def get_all_models(request, refresh: bool = False, user: UserModel = None)
                 "created": custom_model.created_at,
                 "owned_by": owned_by,
                 "preset": True,
+                "is_active": custom_model.is_active,
+                "source": custom_model.source,
                 **({"pipe": pipe} if pipe is not None else {}),
             }
 

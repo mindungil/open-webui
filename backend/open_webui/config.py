@@ -1497,9 +1497,22 @@ def validate_cors_origin(origin):
 # CORS_ALLOW_ORIGIN=http://localhost:5173;http://localhost:8080
 # in your .env file depending on your frontend port, 5173 in this case.
 
-CORS_ALLOW_ORIGIN = os.environ.get(
-    "CORS_ALLOW_ORIGIN", "http://localhost:5173;http://localhost:8080;http://220.124.155.35:5173"
-).split(";")
+import os
+import re
+
+raw_origins = os.environ.get(
+    "CORS_ALLOW_ORIGIN",
+    "http://localhost:5173;http://localhost:8080;http://127.0.0.1:8000;http://127.0.0.1:8500;https://ai.jb.go.kr:5173;https://ai.jb.go.kr:8080;https://ai.jb.go.kr;http://ai.jb.go.kr"
+)
+
+CORS_ALLOW_ORIGIN = [
+    o.strip()
+    for o in re.split(r"[;,]", raw_origins)
+    if o.strip()
+]
+
+#print("ENV CORS_ALLOW_ORIGIN =", repr(os.environ.get("CORS_ALLOW_ORIGIN")))
+#print("PARSED CORS_ALLOW_ORIGIN =", repr(CORS_ALLOW_ORIGIN))
 
 
 # Allows custom URL schemes (e.g., app://) to be used as origins for CORS.

@@ -78,7 +78,6 @@
 		stopTask,
 		getTaskIdsByChatId
 	} from '$lib/apis';
-	import { getGPTTemplateById } from '$lib/apis/gpt-templates';
 	import { getTools } from '$lib/apis/tools';
 	import { uploadFile } from '$lib/apis/files';
 	import { createOpenAITextStream } from '$lib/apis/streaming';
@@ -142,7 +141,6 @@
 
 	let chat = null;
 	let tags = [];
-	let currentTemplate = null;
 
 	let history = {
 		messages: {},
@@ -1084,15 +1082,6 @@
 				return [];
 			});
 
-			// GPT 템플릿 정보 로드
-			if (chat.template_id) {
-				currentTemplate = await getGPTTemplateById(localStorage.token, chat.template_id).catch((error) => {
-					console.error('Failed to load template:', error);
-					return null;
-				});
-			} else {
-				currentTemplate = null;
-			}
 
 			const chatContent = chat.chat;
 
@@ -2285,7 +2274,7 @@
 					timestamp: Date.now()
 				},
 				$selectedFolder?.id,
-				currentTemplate?.id ?? null
+				null
 			);
 
 			_chatId = chat.id;
@@ -2453,7 +2442,6 @@
 						{history}
 						title={$chatTitle}
 						bind:selectedModels
-						{currentTemplate}
 						shareEnabled={!!history.currentId}
 						{initNewChat}
 						archiveChatHandler={() => {}}

@@ -67,6 +67,7 @@ from open_webui.socket.main import (
     get_models_in_use,
     get_active_user_ids,
 )
+from open_webui.utils.usage_reset_scheduler import periodic_usage_reset
 from open_webui.routers import (
     audio,
     images,
@@ -93,7 +94,6 @@ from open_webui.routers import (
     users,
     utils,
     scim,
-    gpt_templates,
 )
 
 from open_webui.routers import usage
@@ -110,7 +110,6 @@ from open_webui.models.functions import Functions
 from open_webui.models.models import Models
 from open_webui.models.users import UserModel, Users
 from open_webui.models.chats import Chats
-from open_webui.models.gpt_templates import GPTTemplates
 
 from open_webui.config import (
     # Ollama
@@ -602,6 +601,7 @@ async def lifespan(app: FastAPI):
         limiter.total_tokens = THREAD_POOL_SIZE
 
     asyncio.create_task(periodic_usage_pool_cleanup())
+    asyncio.create_task(periodic_usage_reset())
 
     if app.state.config.ENABLE_BASE_MODELS_CACHE:
         await get_all_models(
@@ -1323,8 +1323,6 @@ app.mount("/ws", socket_app)
 
 app.include_router(usage.router, prefix="/api/v1/usage", tags=["usage"])
 
-# app.include_router(gpt_templates.router, prefix="/api/v1/gpt-templates", tags=["gpt-templates"])
-
 app.include_router(ollama.router, prefix="/ollama", tags=["ollama"])
 app.include_router(openai.router, prefix="/openai", tags=["openai"])
 
@@ -1350,7 +1348,6 @@ app.include_router(notes.router, prefix="/api/v1/notes", tags=["notes"])
 app.include_router(models.router, prefix="/api/v1/models", tags=["models"])
 app.include_router(knowledge.router, prefix="/api/v1/knowledge", tags=["knowledge"])
 app.include_router(prompts.router, prefix="/api/v1/prompts", tags=["prompts"])
-app.include_router(gpt_templates.router, prefix="/api/v1/gpt-templates", tags=["gpt_templates"])
 app.include_router(tools.router, prefix="/api/v1/tools", tags=["tools"])
 
 app.include_router(memories.router, prefix="/api/v1/memories", tags=["memories"])
@@ -1567,33 +1564,6 @@ async def chat_completion(
 
         request.state.metadata = metadata
         form_data["metadata"] = metadata
-
-        # GPT Template system_prompt 적용
-        if metadata.get("chat_id") and not metadata["chat_id"].startswith("local:"):
-            try:
-                chat = Chats.get_chat_by_id(metadata["chat_id"])
-                log.info(f"GPT Template check - chat_id: {metadata.get('chat_id')}, template_id: {chat.template_id if chat else None}")
-                if chat and chat.template_id:
-                    template = GPTTemplates.get_template_by_id(chat.template_id)
-                    log.info(f"GPT Template found - name: {template.name if template else None}, api_url: {template.api_url if template else None}")
-                    if template:
-                        # system_prompt 적용
-                        if template.system_prompt:
-                            messages = form_data.get("messages", [])
-                            # 이미 system message가 있는지 확인
-                            has_system = any(msg.get("role") == "system" for msg in messages)
-                            if not has_system:
-                                # system_prompt를 messages 맨 앞에 추가
-                                form_data["messages"] = [
-                                    {"role": "system", "content": template.system_prompt}
-                                ] + messages
-
-                        # 템플릿에 api_url이 설정되어 있으면 metadata에 저장
-                        if template.api_url:
-                            metadata["template_api_url"] = template.api_url
-                            log.info(f"GPT Template API URL set: {template.api_url}")
-            except Exception as e:
-                log.error(f"Error applying GPT template: {e}")
 
     except Exception as e:
         log.debug(f"Error processing chat metadata: {e}")

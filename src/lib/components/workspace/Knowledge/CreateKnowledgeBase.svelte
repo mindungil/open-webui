@@ -30,14 +30,15 @@
 			localStorage.token,
 			name,
 			description,
-			accessControl
+			accessControl,
+			'workspace'
 		).catch((e) => {
 			toast.error(`${e}`);
 		});
 
 		if (res) {
 			toast.success($i18n.t('Knowledge created successfully.'));
-			knowledge.set(await getKnowledgeBases(localStorage.token));
+			knowledge.set(await getKnowledgeBases(localStorage.token, 'workspace'));
 			goto(`/workspace/knowledge/${res.id}`);
 		}
 

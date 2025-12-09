@@ -54,6 +54,11 @@ class Knowledge(Base):
     #      }
     #   }
 
+    source = Column(Text, default="workspace")
+    """
+        Source of the knowledge: 'workspace' or 'gpts'
+    """
+
     created_at = Column(BigInteger)
     updated_at = Column(BigInteger)
 
@@ -71,6 +76,8 @@ class KnowledgeModel(BaseModel):
     meta: Optional[dict] = None
 
     access_control: Optional[dict] = None
+
+    source: str = "workspace"
 
     created_at: int  # timestamp in epoch
     updated_at: int  # timestamp in epoch
@@ -98,6 +105,7 @@ class KnowledgeForm(BaseModel):
     description: str
     data: Optional[dict] = None
     access_control: Optional[dict] = None
+    source: str = "workspace"
 
 
 class KnowledgeTable:
@@ -127,11 +135,12 @@ class KnowledgeTable:
             except Exception:
                 return None
 
-    def get_knowledge_bases(self) -> list[KnowledgeUserModel]:
+    def get_knowledge_bases(self, source: Optional[str] = None) -> list[KnowledgeUserModel]:
         with get_db() as db:
-            all_knowledge = (
-                db.query(Knowledge).order_by(Knowledge.updated_at.desc()).all()
-            )
+            query = db.query(Knowledge).order_by(Knowledge.updated_at.desc())
+            if source:
+                query = query.filter(Knowledge.source == source)
+            all_knowledge = query.all()
 
             user_ids = list(set(knowledge.user_id for knowledge in all_knowledge))
 
@@ -161,9 +170,9 @@ class KnowledgeTable:
         return has_access(user_id, permission, knowledge.access_control, user_group_ids)
 
     def get_knowledge_bases_by_user_id(
-        self, user_id: str, permission: str = "write"
+        self, user_id: str, permission: str = "write", source: Optional[str] = None
     ) -> list[KnowledgeUserModel]:
-        knowledge_bases = self.get_knowledge_bases()
+        knowledge_bases = self.get_knowledge_bases(source=source)
         user_group_ids = {group.id for group in Groups.get_groups_by_member_id(user_id)}
         return [
             knowledge_base

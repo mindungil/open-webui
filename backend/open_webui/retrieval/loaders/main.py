@@ -403,7 +403,7 @@ class Loader:
                 loader = DeepSeekOCRLoader(
                     file_path,
                     extract_images=True,
-                    ocr_server_url="http://220.124.155.35:30100"
+                    ocr_server_url="http://ai.jb.go.kr:30100"
                 )
                 # loader = ChandraLoader(
                 #     file_path,
@@ -457,7 +457,7 @@ class Loader:
                 # loader = DeepSeekOCRLoader(
                 #     file_path,
                 #     extract_images=True,
-                #     ocr_server_url="http://220.124.155.35:30100"
+                #     ocr_server_url="http://127.0.0.1:30100"
                 # )
             elif file_ext == "odt":
                 loader = UnstructuredODTLoader(file_path)

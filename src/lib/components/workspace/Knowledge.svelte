@@ -88,15 +88,15 @@
 		});
 
 		if (res) {
-			knowledgeBases = await getKnowledgeBaseList(localStorage.token);
-			knowledge.set(await getKnowledgeBases(localStorage.token));
+			knowledgeBases = await getKnowledgeBaseList(localStorage.token, 'workspace');
+			knowledge.set(await getKnowledgeBases(localStorage.token, 'workspace'));
 			toast.success($i18n.t('Knowledge deleted successfully.'));
 		}
 	};
 
 	onMount(async () => {
 		viewOption = localStorage?.workspaceViewOption || '';
-		knowledgeBases = await getKnowledgeBaseList(localStorage.token);
+		knowledgeBases = await getKnowledgeBaseList(localStorage.token, 'workspace');
 		loaded = true;
 	});
 </script>
